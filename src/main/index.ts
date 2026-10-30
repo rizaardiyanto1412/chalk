@@ -173,9 +173,10 @@ function createWindow(): void {
 app.setName('Easel')
 
 app.whenReady().then(async () => {
-  const projectDir = process.env.EASEL_PROJECT_DIR || readConfig().projectDir || join(homedir(), 'Easel', 'Untitled')
-  store.open(existsSync(projectDir) || !readConfig().projectDir ? projectDir : join(homedir(), 'Easel', 'Untitled'))
-  writeConfig({ projectDir: store.dir })
+  const saved = readConfig().projectDir
+  const fallback = join(homedir(), 'Easel', 'Untitled')
+  store.open(process.env.EASEL_PROJECT_DIR || (saved && existsSync(saved) ? saved : fallback))
+  if (!process.env.EASEL_PROJECT_DIR) writeConfig({ projectDir: store.dir })
 
   browser = new Browser()
   toolContext = {

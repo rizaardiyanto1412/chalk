@@ -121,6 +121,21 @@ await check('browser_navigate loads a page and switches the UI to the Browser ta
   await win.waitForSelector('.segmented button.is-on:has-text("Browser")')
 })
 
+await check('the native browser view is visible and covers exactly the browser area', async () => {
+  await win.waitForTimeout(300)
+  const slot = await win.locator('.browser-slot').boundingBox()
+  const view = await app.evaluate(({ BrowserWindow }) => {
+    const v = BrowserWindow.getAllWindows()[0].contentView.children[0]
+    return { visible: v.getVisible(), bounds: v.getBounds(), url: v.webContents.getURL() }
+  })
+  assert.ok(view.visible)
+  assert.equal(view.url, `${SITE}/`)
+  for (const k of ['x', 'y', 'width', 'height']) assert.ok(Math.abs(view.bounds[k] - slot[k]) <= 1, `${k}: view ${view.bounds[k]} vs slot ${slot[k]}`)
+  await win.locator('.segmented button:has-text("Canvas")').click()
+  await win.waitForTimeout(200)
+  assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].contentView.children[0].getVisible()), false, 'hidden on the Canvas tab')
+})
+
 let snap
 await check('browser_snapshot lists landmarks, headings, and refs for links and menus', async () => {
   snap = (await call(client, 'browser_snapshot'))[0].text

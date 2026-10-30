@@ -10,8 +10,9 @@
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "electron-vite preview",
-    "dist": "electron-vite build && electron-builder --mac --dir",
-    "e2e": "node scripts/e2e.mjs"
+    "dist": "electron-vite build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --dir",
+    "e2e": "node scripts/e2e.mjs",
+    "install-app": "npm run dist && codesign --force --deep --sign - dist/mac-arm64/Easel.app && rm -rf /Applications/Easel.app && cp -R dist/mac-arm64/Easel.app /Applications/Easel.app"
   },
   "build": {
     "appId": "dev.easel.app",
@@ -26,7 +27,8 @@
     "mac": {
       "target": "dir",
       "category": "public.app-category.graphics-design",
-      "identity": null
+      "identity": null,
+      "icon": "build/icon.png"
     }
   },
   "dependencies": {
@@ -48,5 +50,6 @@
     "react-dom": "^19.3.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.5"
-  }
+  },
+  "author": "Easel"
 }
