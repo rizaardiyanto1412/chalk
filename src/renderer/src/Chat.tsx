@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { AgentEvent, AgentStatus, BrowserPick, Frame } from '../../shared/model'
 import { api } from './api'
 import { Icon } from './icons'
+import { Markdown } from './Markdown'
 
 const TOOL_LABELS: Record<string, string> = {
   get_canvas: 'Read canvas',
@@ -140,7 +141,7 @@ function Message({ ev }: { ev: AgentEvent }) {
     case 'user':
       return <div className="msg-user">{ev.text}</div>
     case 'text':
-      return <div className="msg-text">{ev.text}</div>
+      return <div className="msg-text"><Markdown text={ev.text} /></div>
     case 'tool':
       return (
         <div className="msg-tool">

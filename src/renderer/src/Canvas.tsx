@@ -228,7 +228,7 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
                 <span className="frame-size">{box.width} × {box.height}</span>
               </div>
               {f.kind === 'html' ? (
-                <iframe title={f.name} src={`http://127.0.0.1:${port}/frame/${f.id}?v=${f.updatedAt}`} scrolling="no" style={{ height: f.height }} />
+                <FrameView title={f.name} src={`http://127.0.0.1:${port}/frame/${f.id}?v=${f.updatedAt}`} />
               ) : (
                 <img src={`http://127.0.0.1:${port}/assets/${f.asset}`} alt={f.name} draggable={false} />
               )}
@@ -298,5 +298,32 @@ function FrameToolbar({ frame, cam, live, onLive, onDelete }: { frame: Frame; ca
         <Icon name="trash" size={14} />
       </button>
     </div>
+  )
+}
+
+/** Keep the last loaded render on screen until the new one has loaded and styled, so edits never flash white. */
+function FrameView({ title, src }: { title: string; src: string }) {
+  const [shown, setShown] = useState(src)
+  const [pending, setPending] = useState<string | null>(null)
+  useEffect(() => {
+    if (src !== shown) setPending(src)
+  }, [src, shown])
+  return (
+    <>
+      <iframe key={shown} title={title} src={shown} scrolling="no" />
+      {pending && (
+        <iframe
+          key={pending}
+          title={title}
+          src={pending}
+          scrolling="no"
+          className="is-pending"
+          onLoad={() => setTimeout(() => {
+            setShown(pending)
+            setPending(null)
+          }, 250)}
+        />
+      )}
+    </>
   )
 }

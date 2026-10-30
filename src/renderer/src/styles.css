@@ -179,3 +179,12 @@ code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11.5px
 .send { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; background: var(--text); color: #fff; }
 .send:disabled { background: #d4d4d8; opacity: 1; }
 .send.is-stop { background: #fff; color: var(--text); border: 1px solid var(--line); }
+.msg-text { white-space: normal; }
+.msg-text p, .msg-text ul, .msg-text ol { margin: 0 0 8px; }
+.msg-text > :last-child { margin-bottom: 0; }
+.msg-text ul, .msg-text ol { padding-left: 18px; }
+.msg-text li { margin: 2px 0; }
+.msg-text strong { font-weight: 600; color: var(--text); }
+.msg-text code { padding: 1px 4px; border-radius: 4px; background: var(--hover); }
+.frame iframe { position: absolute; inset: 0; }
+.frame iframe.is-pending { visibility: hidden; }
