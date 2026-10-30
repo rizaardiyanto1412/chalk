@@ -46,3 +46,11 @@ node scripts/agent-run.mjs runs/x "prompt"   # drive a real agent run and save r
 ## Security
 
 The server listens on 127.0.0.1 only. It accepts only loopback `Host` headers, so DNS rebinding fails. The `/mcp` endpoint rejects any request with an `Origin` header, so web pages cannot call the tools. The agent can use only Easel's tools plus web fetch and search. It cannot run shell commands or write files.
+
+## Check that a build matches its design
+
+`scripts/parity.mjs` renders a frame and a built app in the same headless Chrome and diffs them pixel by pixel. `scripts/build-with-claude.sh` and `scripts/build-selected.sh` ask Claude Code to build a frame through the MCP. Results from the first run are in `proof/parity.md`.
+
+```sh
+node scripts/parity.mjs --port 7801 --frame <frame id> --dist <app>/dist --out /tmp/parity
+```
