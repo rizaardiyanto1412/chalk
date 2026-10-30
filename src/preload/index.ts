@@ -9,5 +9,5 @@ const api = {
   }
 }
 
-contextBridge.exposeInMainWorld('easel', api)
-export type EaselApi = typeof api
+contextBridge.exposeInMainWorld('chalk', api)
+export type ChalkApi = typeof api

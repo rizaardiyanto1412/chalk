@@ -1,9 +1,11 @@
 import { EventEmitter } from 'node:events'
-import { readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { applyOp, emptyDoc, parseDoc, type Doc, type FrameId, type Op, type BrowserPick } from '../shared/model'
 
-const DOC_FILE = 'easel.json'
+const DOC_FILE = 'chalk.json'
+/** Projects saved before the app was renamed from Easel. Read once, then saved as chalk.json. */
+const LEGACY_DOC_FILE = 'easel.json'
 
 export class Store extends EventEmitter {
   doc: Doc = emptyDoc()
@@ -19,7 +21,8 @@ export class Store extends EventEmitter {
     mkdirSync(join(dir, 'assets'), { recursive: true })
     this.dir = dir
     try {
-      this.doc = parseDoc(JSON.parse(readFileSync(join(dir, DOC_FILE), 'utf8')))
+      const file = [DOC_FILE, LEGACY_DOC_FILE].map((f) => join(dir, f)).find((f) => existsSync(f)) ?? join(dir, DOC_FILE)
+      this.doc = parseDoc(JSON.parse(readFileSync(file, 'utf8')))
     } catch {
       this.doc = emptyDoc()
     }

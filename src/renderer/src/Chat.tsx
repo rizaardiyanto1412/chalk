@@ -49,7 +49,7 @@ const SUGGESTIONS = [
 
 export function Chat({ events, status, models, claudePath, selectedFrames, pick, onClearSelection, onNewChat }: Props) {
   const [text, setText] = useState('')
-  const [model, setModel] = useState(() => localStorage.getItem('easel.model') ?? '')
+  const [model, setModel] = useState(() => localStorage.getItem('chalk.model') ?? '')
   const list = useRef<HTMLDivElement>(null)
   const box = useRef<HTMLTextAreaElement>(null)
   const running = status === 'running'
@@ -137,7 +137,7 @@ export function Chat({ events, status, models, claudePath, selectedFrames, pick,
               value={model}
               onChange={(e) => {
                 setModel(e.target.value)
-                localStorage.setItem('easel.model', e.target.value)
+                localStorage.setItem('chalk.model', e.target.value)
               }}
               title="Claude model"
             >

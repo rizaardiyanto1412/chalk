@@ -17,7 +17,7 @@ const SNAPSHOT_JS = `(() => {
   const MAX = 450
   const lines = []
   let n = 0
-  document.querySelectorAll('[data-easel-ref]').forEach((el) => el.removeAttribute('data-easel-ref'))
+  document.querySelectorAll('[data-chalk-ref]').forEach((el) => el.removeAttribute('data-chalk-ref'))
   const visible = (el) => {
     const r = el.getBoundingClientRect()
     if (r.width < 2 || r.height < 2) return false
@@ -37,7 +37,7 @@ const SNAPSHOT_JS = `(() => {
     if (/^H[1-3]$/.test(tag) && visible(el)) { lines.push('  '.repeat(d) + tag.toLowerCase() + ' "' + text(el) + '"'); return }
     if (el.matches(INTERACTIVE) && visible(el)) {
       const ref = 'e' + (++n)
-      el.setAttribute('data-easel-ref', ref)
+      el.setAttribute('data-chalk-ref', ref)
       const kind = role || (tag === 'A' ? 'link' : tag === 'INPUT' ? 'input[' + (el.type || 'text') + ']' : tag.toLowerCase())
       const href = tag === 'A' ? ' -> ' + el.getAttribute('href') : ''
       const state = el.getAttribute('aria-expanded') ? ' (expanded=' + el.getAttribute('aria-expanded') + ')' : ''
@@ -72,7 +72,7 @@ const STYLES_JS = `(() => {
 })()`
 
 const pickJs = (prefix: string) => `(() => {
-  if (window.__easelPick) return
+  if (window.__chalkPick) return
   const box = document.createElement('div')
   box.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;border:2px solid #2563eb;background:rgba(37,99,235,.08);border-radius:3px;transition:all .05s'
   const label = document.createElement('div')
@@ -97,7 +97,7 @@ const pickJs = (prefix: string) => `(() => {
     label.textContent = cur.tagName.toLowerCase() + '  ' + Math.round(r.width) + '×' + Math.round(r.height)
     Object.assign(label.style, { left: r.left + 'px', top: Math.max(0, r.top - 20) + 'px' })
   }
-  const stop = () => { removeEventListener('mousemove', move, true); removeEventListener('click', click, true); removeEventListener('keydown', key, true); box.remove(); label.remove(); window.__easelPick = null }
+  const stop = () => { removeEventListener('mousemove', move, true); removeEventListener('click', click, true); removeEventListener('keydown', key, true); box.remove(); label.remove(); window.__chalkPick = null }
   const click = (e) => {
     e.preventDefault(); e.stopPropagation()
     const el = cur || e.target
@@ -107,7 +107,7 @@ const pickJs = (prefix: string) => `(() => {
   }
   const key = (e) => { if (e.key === 'Escape') { stop(); console.log('${prefix}null') } }
   addEventListener('mousemove', move, true); addEventListener('click', click, true); addEventListener('keydown', key, true)
-  window.__easelPick = stop
+  window.__chalkPick = stop
 })()`
 
 export class Browser extends EventEmitter {
@@ -118,10 +118,10 @@ export class Browser extends EventEmitter {
 
   constructor() {
     super()
-    this.view = new WebContentsView({ webPreferences: { partition: 'persist:easel-browser', sandbox: true } })
+    this.view = new WebContentsView({ webPreferences: { partition: 'persist:chalk-browser', sandbox: true } })
     this.view.setVisible(false)
     const wc = this.view.webContents
-    wc.setUserAgent(wc.getUserAgent().replace(/ (Electron|easel)\/\S+/g, ''))
+    wc.setUserAgent(wc.getUserAgent().replace(/ (Electron|chalk)\/\S+/g, ''))
     for (const ev of ['did-start-loading', 'did-stop-loading', 'did-navigate', 'did-navigate-in-page', 'page-title-updated'] as const) {
       wc.on(ev as 'did-stop-loading', () => {
         if (ev === 'did-navigate') this.picking = false
@@ -209,7 +209,7 @@ export class Browser extends EventEmitter {
   }
 
   private async withRef<T>(ref: string, js: (sel: string) => string): Promise<T> {
-    const sel = JSON.stringify(`[data-easel-ref="${ref}"]`)
+    const sel = JSON.stringify(`[data-chalk-ref="${ref}"]`)
     const res = await this.view.webContents.executeJavaScript(
       `(() => { const el = document.querySelector(${sel}); if (!el) return { error: 'No element ${ref}. Take a new browser_snapshot; refs reset after navigation.' }; ${js('el')} })()`
     )
@@ -261,7 +261,7 @@ export class Browser extends EventEmitter {
 
   async startPick(): Promise<void> {
     this.picking = true
-    this.pickPrefix = `__easel_pick_${randomUUID()}__`
+    this.pickPrefix = `__chalk_pick_${randomUUID()}__`
     this.emit('state', this.state())
     await this.view.webContents.executeJavaScript(pickJs(this.pickPrefix))
   }
@@ -270,7 +270,7 @@ export class Browser extends EventEmitter {
     this.picking = false
     this.pickPrefix = null
     this.emit('state', this.state())
-    await this.view.webContents.executeJavaScript('window.__easelPick && window.__easelPick()').catch(() => {})
+    await this.view.webContents.executeJavaScript('window.__chalkPick && window.__chalkPick()').catch(() => {})
   }
 }
 

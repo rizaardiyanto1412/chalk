@@ -1,5 +1,5 @@
 app: /Applications/Easel.app at commit bc526eac
-health: {"ok":true,"project":"/Users/rizaardiyanto/Documents/easel/runs/proof-project","frames":1}
+health: {"ok":true,"project":"~/Documents/easel/runs/proof-project","frames":1}
 command: claude -p ... --mcp-config easel http://127.0.0.1:7961/mcp --strict-mcp-config
 - **Frame name:** Relay — Settings (id `0ff0ac97`)
 - **Accent color class:** `teal-600`. The frame uses it as `bg-teal-600`, `text-teal-600` and `border-teal-600`.

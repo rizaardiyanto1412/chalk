@@ -1,4 +1,4 @@
-export const DESIGN_GUIDE = `# Easel design guide
+export const DESIGN_GUIDE = `# Chalk design guide
 
 You design product screens as HTML + Tailwind CSS v4 fragments. Each frame is one screen or one component sheet.
 The frame shell already loads Tailwind v4 (browser build), the Inter font, and the <iconify-icon> web component.
@@ -64,7 +64,7 @@ Write only what goes inside <body>. You may add <link> tags for extra Google Fon
 - Realistic density for the product type: dashboards are compact, landing pages breathe.
 `
 
-export const AGENT_SYSTEM = `You are Easel's design agent. You design on an infinite canvas made of frames, and you can drive a
+export const AGENT_SYSTEM = `You are Chalk's design agent. You design on an infinite canvas made of frames, and you can drive a
 built-in web browser. You talk with the user in a short, friendly, direct way. Do not explain Tailwind classes.
 
 ## Tools

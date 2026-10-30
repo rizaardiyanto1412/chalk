@@ -17,7 +17,7 @@ const store = new Store()
 let win: BrowserWindow | null = null
 let browser: Browser
 let agent: Agent
-let port = Number(process.env.EASEL_PORT) || DEFAULT_PORT
+let port = Number(process.env.CHALK_PORT) || DEFAULT_PORT
 let server: Server | null = null
 
 interface Config {
@@ -28,19 +28,21 @@ interface Config {
 }
 
 const configFile = () => join(app.getPath('userData'), 'config.json')
+/** Settings from before the rename live under the old app name. */
+const legacyConfigFile = () => join(app.getPath('appData'), 'Easel', 'config.json')
 function readConfig(): Config {
   try {
-    const c = JSON.parse(readFileSync(configFile(), 'utf8'))
+    const c = JSON.parse(readFileSync(existsSync(configFile()) ? configFile() : legacyConfigFile(), 'utf8'))
     return { projectDir: c.projectDir, projects: Array.isArray(c.projects) ? c.projects : [], recentUrls: Array.isArray(c.recentUrls) ? c.recentUrls : [] }
   } catch {
     return { projects: [], recentUrls: [] }
   }
 }
 let config: Config = { projects: [], recentUrls: [] }
-/** Test runs pin a project with EASEL_PROJECT_DIR and must not touch the user's saved tabs. */
+/** Test runs pin a project with CHALK_PROJECT_DIR and must not touch the user's saved tabs. */
 function updateConfig(patch: Partial<Config>): void {
   config = { ...config, ...patch }
-  if (!process.env.EASEL_PROJECT_DIR) writeFileSync(configFile(), JSON.stringify(config))
+  if (!process.env.CHALK_PROJECT_DIR) writeFileSync(configFile(), JSON.stringify(config))
 }
 
 const tabs = () => config.projects.map((dir) => ({ dir, name: basename(dir) }))
@@ -54,7 +56,7 @@ function openProject(dir: string): void {
   store.open(dir)
   updateConfig({ projectDir: dir, projects: config.projects.includes(dir) ? config.projects : [...config.projects, dir] })
   agent?.reset()
-  win?.setTitle(`${basename(dir)} · Easel`)
+  win?.setTitle(`${basename(dir)} · Chalk`)
   send('project', { dir, name: basename(dir) })
   send('tabs', tabs())
 }
@@ -67,9 +69,9 @@ function closeProject(dir: string): void {
   send('tabs', tabs())
 }
 
-/** A new untitled project in ~/Easel, opened straight away like a new document. */
+/** A new untitled project in ~/Chalk, opened straight away like a new document. */
 function newUntitled(): void {
-  const root = join(homedir(), 'Easel')
+  const root = join(homedir(), 'Chalk')
   let n = 1
   while (existsSync(join(root, n === 1 ? 'Untitled' : `Untitled ${n}`))) n++
   const dir = join(root, n === 1 ? 'Untitled' : `Untitled ${n}`)
@@ -87,8 +89,8 @@ function rememberUrl(url: string): void {
 async function chooseProject(create: boolean): Promise<void> {
   if (!win) return
   const res = create
-    ? await dialog.showSaveDialog(win, { title: 'New Easel project', defaultPath: join(homedir(), 'Easel', 'Untitled'), buttonLabel: 'Create' })
-    : await dialog.showOpenDialog(win, { title: 'Open Easel project folder', defaultPath: join(homedir(), 'Easel'), properties: ['openDirectory', 'createDirectory'] })
+    ? await dialog.showSaveDialog(win, { title: 'New Chalk project', defaultPath: join(homedir(), 'Chalk', 'Untitled'), buttonLabel: 'Create' })
+    : await dialog.showOpenDialog(win, { title: 'Open Chalk project folder', defaultPath: join(homedir(), 'Chalk'), properties: ['openDirectory', 'createDirectory'] })
   const dir = 'filePath' in res ? res.filePath : res.filePaths[0]
   if (res.canceled || !dir) return
   mkdirSync(dir, { recursive: true })
@@ -237,7 +239,7 @@ function registerIpc(): void {
   })
   handle('image:add', (_e, { name, bytes, x, y }: { name: string; bytes: Uint8Array; x: number; y: number }) => {
     const img = nativeImage.createFromBuffer(Buffer.from(bytes))
-    if (img.isEmpty()) throw new Error('Not an image Easel can read.')
+    if (img.isEmpty()) throw new Error('Not an image Chalk can read.')
     const id = randomUUID().slice(0, 8) as FrameId
     const asset = `${id}.png`
     writeFileSync(store.assetPath(asset), img.toPNG())
@@ -255,7 +257,7 @@ function createWindow(): void {
     height: 920,
     minWidth: 960,
     minHeight: 600,
-    title: `${basename(store.dir)} · Easel`,
+    title: `${basename(store.dir)} · Chalk`,
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 16 },
     backgroundColor: '#f4f4f5',
@@ -277,13 +279,13 @@ function createWindow(): void {
   })
 }
 
-app.setName('Easel')
+app.setName('Chalk')
 
 app.whenReady().then(async () => {
-  config = process.env.EASEL_PROJECT_DIR ? { projects: [], recentUrls: [] } : readConfig()
+  config = process.env.CHALK_PROJECT_DIR ? { projects: [], recentUrls: [] } : readConfig()
   const saved = config.projectDir
-  const fallback = join(homedir(), 'Easel', 'Untitled')
-  const first = process.env.EASEL_PROJECT_DIR || (saved && existsSync(saved) ? saved : fallback)
+  const fallback = join(homedir(), 'Chalk', 'Untitled')
+  const first = process.env.CHALK_PROJECT_DIR || (saved && existsSync(saved) ? saved : fallback)
   store.open(first)
   updateConfig({ projectDir: first, projects: [...new Set([...config.projects.filter((p) => existsSync(p)), first])] })
 

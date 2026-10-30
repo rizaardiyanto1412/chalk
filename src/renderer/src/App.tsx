@@ -17,8 +17,8 @@ export function App() {
   const [tabs, setTabs] = useState<ProjectTab[]>([])
   const [leftTab, setLeftTab] = useState<LeftTab>('agent')
   const [leftOpen, setLeftOpen] = useState(true)
-  const [browserOpen, setBrowserOpen] = useState(() => localStorage.getItem('easel.browserOpen') !== '0')
-  const [browserWidth, setBrowserWidth] = useState(() => stored('easel.browserWidth', 560))
+  const [browserOpen, setBrowserOpen] = useState(() => localStorage.getItem('chalk.browserOpen') !== '0')
+  const [browserWidth, setBrowserWidth] = useState(() => stored('chalk.browserWidth', 560))
   const [tool, setTool] = useState<CanvasTool>('select')
   const [selection, setSelection] = useState<FrameId[]>([])
   const [browser, setBrowser] = useState<BrowserState>({ url: '', title: '', loading: false, canGoBack: false, canGoForward: false, picking: false })
@@ -36,7 +36,7 @@ export function App() {
 
   const openBrowser = useCallback((open: boolean) => {
     setBrowserOpen(open)
-    localStorage.setItem('easel.browserOpen', open ? '1' : '0')
+    localStorage.setItem('chalk.browserOpen', open ? '1' : '0')
   }, [])
 
   useEffect(() => {
@@ -111,7 +111,7 @@ export function App() {
       window.removeEventListener('pointerup', up)
       document.body.classList.remove('is-resizing')
       setBrowserWidth((w) => {
-        localStorage.setItem('easel.browserWidth', String(w))
+        localStorage.setItem('chalk.browserWidth', String(w))
         return w
       })
     }
@@ -124,7 +124,7 @@ export function App() {
     <div className="app">
       <div className="workspace">
         <header className="titlebar">
-          <span className="brand"><span className="brand-mark" /> Easel</span>
+          <span className="brand"><span className="brand-mark" /> Chalk</span>
           <nav className="tabs">
             {tabs.map((t) => (
               <div key={t.dir} className={`tab ${t.dir === project.dir ? 'is-on' : ''}`} title={t.dir} onClick={() => api.project('switch', t.dir)}>
@@ -270,14 +270,14 @@ function LayerRow({ name, kind, selected, onSelect, onRename }: { name: string; 
 function ConnectButton({ mcpUrl }: { mcpUrl: string }) {
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
-  const cmd = `claude mcp add --scope user --transport http easel ${mcpUrl}`
+  const cmd = `claude mcp add --scope user --transport http chalk ${mcpUrl}`
   return (
     <div className="connect">
       <button className="connect-btn" onClick={() => setOpen(!open)}><Icon name="code" size={14} /> Claude Code</button>
       {open && (
         <div className="popover" onMouseLeave={() => setOpen(false)}>
           <h4>Build your designs with Claude Code</h4>
-          <p>Run this once in Terminal. Easel must be open while Claude uses it.</p>
+          <p>Run this once in Terminal. Chalk must be open while Claude uses it.</p>
           <div className="code">
             <code>{cmd}</code>
             <button
@@ -290,7 +290,7 @@ function ConnectButton({ mcpUrl }: { mcpUrl: string }) {
               <Icon name={copied ? 'check' : 'copy'} size={13} />
             </button>
           </div>
-          <p className="muted">Then ask Claude: “Build the selected Easel frame in this project.”</p>
+          <p className="muted">Then ask Claude: “Build the selected Chalk frame in this project.”</p>
         </div>
       )}
     </div>

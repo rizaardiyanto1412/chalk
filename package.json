@@ -1,6 +1,6 @@
 {
-  "name": "easel",
-  "productName": "Easel",
+  "name": "chalk",
+  "productName": "Chalk",
   "version": "0.1.0",
   "description": "Canvas design tool with a built-in browser, a Claude Code agent, and an MCP server",
   "main": "out/main/index.js",
@@ -12,11 +12,11 @@
     "start": "electron-vite preview",
     "dist": "electron-vite build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --dir",
     "e2e": "node scripts/e2e.mjs",
-    "install-app": "npm run dist && codesign --force --deep --sign - dist/mac-arm64/Easel.app && rm -rf /Applications/Easel.app && cp -R dist/mac-arm64/Easel.app /Applications/Easel.app"
+    "install-app": "npm run dist && codesign --force --deep --sign - dist/mac-arm64/Chalk.app && rm -rf /Applications/Chalk.app && cp -R dist/mac-arm64/Chalk.app /Applications/Chalk.app"
   },
   "build": {
-    "appId": "dev.easel.app",
-    "productName": "Easel",
+    "appId": "dev.chalk.app",
+    "productName": "Chalk",
     "files": [
       "out/**/*",
       "resources/**/*"
@@ -53,5 +53,10 @@
     "typescript": "^7.0.2",
     "vite": "^8.3.5"
   },
-  "author": "Easel"
+  "author": "Riza Maulana Ardiyanto",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rizaardiyanto1412/chalk.git"
+  }
 }

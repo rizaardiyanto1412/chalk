@@ -16,10 +16,10 @@ const TAILWIND_JS = readFileSync(createRequire(import.meta.url).resolve('@tailwi
 
 function buildMcp(ctx: ToolContext): McpServer {
   const server = new McpServer(
-    { name: 'easel', version: '0.1.0' },
+    { name: 'chalk', version: '0.1.0' },
     {
       instructions:
-        'Easel is a canvas design app on this Mac. Use get_canvas to see frames and what the user selected, get_frame (standalone=true for a full HTML document) and screenshot_frame to read a design, and get_design_guidelines to match its style. When asked to build a design in code, reproduce the frame exactly in the project\'s own stack.'
+        'Chalk is a canvas design app on this Mac. Use get_canvas to see frames and what the user selected, get_frame (standalone=true for a full HTML document) and screenshot_frame to read a design, and get_design_guidelines to match its style. When asked to build a design in code, reproduce the frame exactly in the project\'s own stack.'
     }
   )
   for (const t of TOOLS) {

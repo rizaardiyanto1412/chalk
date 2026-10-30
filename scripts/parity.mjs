@@ -1,4 +1,4 @@
-// Compare an Easel frame with an app built from it, in the same headless Chrome.
+// Compare an Chalk frame with an app built from it, in the same headless Chrome.
 // Usage: node scripts/parity.mjs --port 7971 --frame <id> --dist <built app dir> --out <dir> [--route /]
 import { chromium } from 'playwright-core'
 import { createServer } from 'node:http'

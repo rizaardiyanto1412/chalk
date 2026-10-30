@@ -86,7 +86,7 @@ const newId = () => randomUUID().slice(0, 8) as FrameId
 export const TOOLS: Tool[] = [
   tool({
     name: 'get_canvas',
-    description: 'List every frame on the Easel canvas (id, name, kind, position, size), plus what the user has selected: selected frame ids and the element they picked in the built-in browser.',
+    description: 'List every frame on the Chalk canvas (id, name, kind, position, size), plus what the user has selected: selected frame ids and the element they picked in the built-in browser.',
     input: {},
     readOnly: true,
     run: async (_a, ctx) => [
@@ -197,7 +197,7 @@ export const TOOLS: Tool[] = [
   }),
   tool({
     name: 'get_design_guidelines',
-    description: 'The Easel design guide: layout, type, color, and component rules every Easel design follows. Read it before you implement or extend an Easel design so the result matches.',
+    description: 'The Chalk design guide: layout, type, color, and component rules every Chalk design follows. Read it before you implement or extend an Chalk design so the result matches.',
     input: {},
     readOnly: true,
     run: async () => [text(DESIGN_GUIDE)]

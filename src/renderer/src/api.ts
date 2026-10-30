@@ -1,9 +1,9 @@
-import type { EaselApi } from '../../preload'
+import type { ChalkApi } from '../../preload'
 import type { AgentEvent, AgentStatus, BrowserPick, Doc, FrameId, Op } from '../../shared/model'
 
 declare global {
   interface Window {
-    easel: EaselApi
+    chalk: ChalkApi
   }
 }
 
@@ -36,7 +36,7 @@ export interface ProjectTab {
 
 export type FocusTarget = { mode: 'canvas'; frameId?: FrameId } | { mode: 'browser' }
 
-const e = () => window.easel
+const e = () => window.chalk
 
 export const api = {
   init: (): Promise<InitState> => e().invoke('init') as Promise<InitState>,

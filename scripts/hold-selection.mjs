@@ -1,5 +1,5 @@
-// Launch Easel on a project, select one frame in the UI, and keep the app open until killed.
-// Usage: EASEL_PROJECT_DIR=... EASEL_PORT=7801 node scripts/hold-selection.mjs "<frame name>"
+// Launch Chalk on a project, select one frame in the UI, and keep the app open until killed.
+// Usage: CHALK_PROJECT_DIR=... CHALK_PORT=7801 node scripts/hold-selection.mjs "<frame name>"
 import { _electron as electron } from 'playwright-core'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'

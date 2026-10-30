@@ -11,7 +11,7 @@ import assert from 'node:assert/strict'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const artifacts = join(root, 'e2e-artifacts')
 mkdirSync(artifacts, { recursive: true })
-const project = mkdtempSync(join(tmpdir(), 'easel-e2e-'))
+const project = mkdtempSync(join(tmpdir(), 'chalk-e2e-'))
 const PORT = 7911
 const results = []
 const check = async (name, fn) => {
@@ -40,7 +40,7 @@ await new Promise((r) => site.listen(7912, '127.0.0.1', r))
 const SITE = 'http://127.0.0.1:7912'
 
 const launch = () =>
-  electron.launch({ args: [root], cwd: root, env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'ELECTRON_RUN_AS_NODE')), EASEL_PROJECT_DIR: project, EASEL_PORT: String(PORT), ELECTRON_RENDERER_URL: '' } })
+  electron.launch({ args: [root], cwd: root, env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'ELECTRON_RUN_AS_NODE')), CHALK_PROJECT_DIR: project, CHALK_PORT: String(PORT), ELECTRON_RENDERER_URL: '' } })
 
 async function mcp() {
   const client = new Client({ name: 'e2e', version: '0' })
@@ -80,7 +80,7 @@ await check('MCP lists all 18 tools', async () => {
 })
 
 await check('create_frame adds a frame, fits height to content, and shows it on the canvas', async () => {
-  const html = `<div class="min-h-[1200px] bg-white p-16"><h1 class="text-5xl font-semibold tracking-tight text-zinc-900">Hello Easel</h1><p id="sub" class="mt-4 text-zinc-500">Subtitle</p><iconify-icon icon="lucide:sparkles" width="24"></iconify-icon></div>`
+  const html = `<div class="min-h-[1200px] bg-white p-16"><h1 class="text-5xl font-semibold tracking-tight text-zinc-900">Hello Chalk</h1><p id="sub" class="mt-4 text-zinc-500">Subtitle</p><iconify-icon icon="lucide:sparkles" width="24"></iconify-icon></div>`
   const out = json(await call(client, 'create_frame', { name: 'Hello', html }))
   frameId = out.created.id
   assert.equal(out.created.width, 1440)
@@ -228,7 +228,7 @@ await check('a hostile frame cannot navigate the app window or call MCP', async 
 await check('a page cannot forge or crash the pick channel through the console', async () => {
   await app.evaluate(async ({ webContents }, site) => {
     const wc = webContents.getAllWebContents().find((w) => w.getURL().startsWith(site))
-    await wc.executeJavaScript(`console.log('__EASEL_PICK__{'); console.log('__easel_pick_x__' + JSON.stringify({ tag: 'forged' }))`)
+    await wc.executeJavaScript(`console.log('__CHALK_PICK__{'); console.log('__chalk_pick_x__' + JSON.stringify({ tag: 'forged' }))`)
   }, SITE)
   await win.waitForTimeout(300)
   const c = json(await call(client, 'get_canvas'))
@@ -322,7 +322,7 @@ await win.waitForTimeout(400)
 await app.close()
 
 await check('frames persist across a restart', async () => {
-  const saved = JSON.parse(readFileSync(join(project, 'easel.json'), 'utf8'))
+  const saved = JSON.parse(readFileSync(join(project, 'chalk.json'), 'utf8'))
   assert.equal(saved.frames.length, 2)
   app = await launch()
   win = await app.firstWindow()
