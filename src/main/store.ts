@@ -11,6 +11,8 @@ export class Store extends EventEmitter {
   selection: FrameId[] = []
   browserPick: BrowserPick | null = null
   private saveTimer: NodeJS.Timeout | null = null
+  private past: Doc[] = []
+  private future: Doc[] = []
 
   open(dir: string): void {
     this.flush()
@@ -22,15 +24,31 @@ export class Store extends EventEmitter {
       this.doc = emptyDoc()
     }
     this.selection = []
+    this.past = []
+    this.future = []
     this.emit('change', this.doc)
   }
 
   dispatch(op: Op): Doc {
+    this.past = [...this.past.slice(-99), this.doc]
+    this.future = []
     this.doc = applyOp(this.doc, op)
     if (op.type === 'delete') this.selection = this.selection.filter((id) => id !== op.id)
     this.emit('change', this.doc)
     this.scheduleSave()
     return this.doc
+  }
+
+  /** Step through history. Returns false when there is nothing to undo or redo. */
+  travel(direction: 'undo' | 'redo'): boolean {
+    const [from, to] = direction === 'undo' ? [this.past, this.future] : [this.future, this.past]
+    const target = from.pop()
+    if (!target) return false
+    to.push(this.doc)
+    this.doc = target
+    this.emit('change', this.doc)
+    this.scheduleSave()
+    return true
   }
 
   assetPath(name: string): string {

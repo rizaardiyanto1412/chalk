@@ -244,6 +244,18 @@ await check('Delete key removes the selected frame', async () => {
   assert.equal(await win.locator('.layer').count(), 1)
 })
 
+await check('Undo restores a deleted frame and Redo deletes it again', async () => {
+  await win.locator('.canvas').click({ position: { x: 5, y: 5 } })
+  const clickMenu = (label) => app.evaluate(({ Menu, BrowserWindow }, label) => {
+    const item = Menu.getApplicationMenu().items.find((i) => i.label === 'Edit').submenu.items.find((i) => i.label === label)
+    item.click(undefined, BrowserWindow.getAllWindows()[0])
+  }, label)
+  await clickMenu('Undo')
+  await win.waitForFunction(() => document.querySelectorAll('.layer').length === 2)
+  await clickMenu('Redo')
+  await win.waitForFunction(() => document.querySelectorAll('.layer').length === 1)
+})
+
 await app.close()
 site.close()
 const failed = results.filter((r) => r[0] === 'FAIL').length

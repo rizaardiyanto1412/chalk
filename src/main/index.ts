@@ -64,7 +64,18 @@ function buildMenu(): void {
           { role: 'close' }
         ]
       },
-      { role: 'editMenu' },
+      {
+        label: 'Edit',
+        submenu: [
+          { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => send('history', 'undo') },
+          { label: 'Redo', accelerator: 'CmdOrCtrl+Shift+Z', click: () => send('history', 'redo') },
+          { type: 'separator' },
+          { role: 'cut' },
+          { role: 'copy' },
+          { role: 'paste' },
+          { role: 'selectAll' }
+        ]
+      },
       {
         label: 'View',
         submenu: [{ role: 'reload' }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'togglefullscreen' }]
@@ -99,6 +110,7 @@ function registerIpc(): void {
     agentStatus: agent.status
   }))
   ipcMain.handle('op', (_e, op: Op) => void store.dispatch(op))
+  ipcMain.handle('history', (_e, direction: 'undo' | 'redo') => store.travel(direction))
   ipcMain.handle('select', (_e, ids: FrameId[]) => {
     store.selection = ids
   })

@@ -49,6 +49,11 @@ export function App() {
       }),
       api.on.agentEvent((e) => setEvents((prev) => [...prev, e])),
       api.on.agentStatus(setStatus),
+      api.on.history((direction) => {
+        const t = document.activeElement
+        if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) document.execCommand(direction)
+        else void api.history(direction)
+      }),
       api.on.focus((t) => {
         setMode(t.mode)
         if (t.mode === 'canvas' && t.frameId) {

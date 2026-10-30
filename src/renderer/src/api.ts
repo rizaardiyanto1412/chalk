@@ -34,6 +34,7 @@ const e = () => window.easel
 export const api = {
   init: (): Promise<InitState> => e().invoke('init') as Promise<InitState>,
   op: (op: Op) => e().invoke('op', op),
+  history: (direction: 'undo' | 'redo') => e().invoke('history', direction),
   select: (ids: FrameId[]) => e().invoke('select', ids),
   browser: (action: string, arg?: unknown) => e().invoke('browser', action, arg),
   sendAgent: (text: string, model: string) => e().invoke('agent:send', { text, model }),
@@ -49,6 +50,7 @@ export const api = {
     browserPick: (fn: (p: BrowserPick | null) => void) => e().on('browser:pick', fn),
     agentEvent: (fn: (ev: AgentEvent) => void) => e().on('agent:event', fn),
     agentStatus: (fn: (s: AgentStatus) => void) => e().on('agent:status', fn),
-    focus: (fn: (t: FocusTarget) => void) => e().on('focus', fn)
+    focus: (fn: (t: FocusTarget) => void) => e().on('focus', fn),
+    history: (fn: (direction: 'undo' | 'redo') => void) => e().on('history', fn)
   }
 }
