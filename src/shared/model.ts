@@ -130,3 +130,12 @@ export type AgentEvent =
   | { type: 'done'; costUsd?: number; durationMs?: number }
 
 export type AgentStatus = 'idle' | 'running'
+
+export type EditCommand = 'copy' | 'cut' | 'paste' | 'selectAll' | 'duplicate'
+
+export type NativeEditCommand = Exclude<EditCommand, 'duplicate'> | 'undo' | 'redo'
+
+export type FrameCommand =
+  | { type: 'create'; preset: 'desktop' | 'mobile' }
+  | { type: 'duplicate' | 'copy' | 'cut' | 'selectAll' | 'delete' }
+  | { type: 'paste'; anchor: { x: number; y: number } }

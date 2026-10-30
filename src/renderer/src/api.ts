@@ -1,5 +1,5 @@
 import type { ChalkApi } from '../../preload'
-import type { AgentEvent, AgentStatus, BrowserPick, CopyImageResult, Doc, ExportActivity, ExportFormat, ExportResult, FrameId, Op } from '../../shared/model'
+import type { AgentEvent, AgentStatus, BrowserPick, CopyImageResult, Doc, ExportActivity, ExportFormat, ExportResult, EditCommand, FrameCommand, NativeEditCommand, FrameId, Op } from '../../shared/model'
 
 declare global {
   interface Window {
@@ -40,7 +40,9 @@ const e = () => window.chalk
 
 export const api = {
   init: (): Promise<InitState> => e().invoke('init') as Promise<InitState>,
-  op: (op: Op) => e().invoke('op', op),
+  op: (op: Op | Op[]) => e().invoke('op', op),
+  frameCommand: (command: FrameCommand) => e().invoke('frames:command', command),
+  nativeEdit: (command: NativeEditCommand) => e().invoke('edit:native', command),
   history: (direction: 'undo' | 'redo') => e().invoke('history', direction),
   select: (ids: FrameId[]) => e().invoke('select', ids),
   browser: (action: string, arg?: unknown) => e().invoke('browser', action, arg),
@@ -54,6 +56,9 @@ export const api = {
   project: (action: 'new' | 'open' | 'reveal' | 'switch' | 'close', dir?: string) => e().invoke('project', action, dir),
   addImage: (img: { name: string; bytes: Uint8Array; x: number; y: number }) => e().invoke('image:add', img),
   on: {
+    edit: (fn: (command: EditCommand) => void) => e().on('edit', fn),
+    selection: (fn: (ids: FrameId[]) => void) => e().on('selection', fn),
+    frameError: (fn: (message: string) => void) => e().on('frames:error', fn),
     exportActivity: (fn: (activity: ExportActivity) => void) => e().on('export:activity', fn),
     doc: (fn: (d: Doc) => void) => e().on('doc', fn),
     project: (fn: (p: { dir: string; name: string }) => void) => e().on('project', fn),

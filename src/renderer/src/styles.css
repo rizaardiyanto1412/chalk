@@ -239,3 +239,5 @@ body.is-resizing iframe { pointer-events: none; }
 .msg-text code { padding: 1px 4px; border-radius: 4px; background: var(--hover); }
 .frame iframe { position: absolute; inset: 0; }
 .frame iframe.is-pending { visibility: hidden; }
+
+.frame-notice { bottom: 64px; }

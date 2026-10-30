@@ -3,8 +3,9 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { Server } from 'node:http'
-import { EXPORT_FORMATS, findFrame, type CopyImageResult, type ExportActivity, type ExportResult, type FrameId, type Op } from '../shared/model'
+import { EXPORT_FORMATS, findFrame, type CopyImageResult, type ExportActivity, type ExportResult, type EditCommand, type NativeEditCommand, type FrameId, type Op } from '../shared/model'
 import { Store } from './store'
+import { FrameCommands, frameIdSchema, safeAssetName } from './frameCommands'
 import { Browser } from './browser'
 import { startServer, DEFAULT_PORT } from './server'
 import { createPreview } from './previews'
@@ -53,6 +54,21 @@ const MAX_RECENT = 30
 
 const mcpUrl = () => `http://127.0.0.1:${port}/mcp`
 const send = (channel: string, payload?: unknown) => win?.webContents.send(channel, payload)
+const frameCommands = new FrameCommands(store, (ids, focus) => {
+  store.selection = ids
+  send('selection', ids)
+  if (focus && ids[0]) send('focus', { mode: 'canvas', frameId: ids[0] })
+})
+
+function nativeEdit(command: NativeEditCommand | 'duplicate'): void {
+  const contents = browser.view.webContents.isFocused() ? browser.view.webContents : win?.webContents
+  if (command !== 'duplicate') contents?.[command]()
+}
+
+function edit(command: EditCommand): void {
+  if (browser.view.webContents.isFocused()) return nativeEdit(command)
+  send('edit', command)
+}
 
 function openProject(dir: string): void {
   if (dir === store.dir) return
@@ -186,10 +202,11 @@ function buildMenu(): void {
           { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => history('undo') },
           { label: 'Redo', accelerator: 'CmdOrCtrl+Shift+Z', click: () => history('redo') },
           { type: 'separator' },
-          { role: 'cut' },
-          { role: 'copy' },
-          { role: 'paste' },
-          { role: 'selectAll' }
+          { label: 'Cut', accelerator: 'CmdOrCtrl+X', click: () => edit('cut') },
+          { label: 'Copy', accelerator: 'CmdOrCtrl+C', click: () => edit('copy') },
+          { label: 'Paste', accelerator: 'CmdOrCtrl+V', click: () => edit('paste') },
+          { label: 'Select All', accelerator: 'CmdOrCtrl+A', click: () => edit('selectAll') },
+          { label: 'Duplicate', accelerator: 'CmdOrCtrl+D', click: () => edit('duplicate') }
         ]
       },
       {
@@ -240,10 +257,25 @@ function registerIpc(): void {
     tabs: tabs(),
     agentStatus: agent.status
   }))
-  handle('op', (_e, op: Op) => void store.dispatch(op))
+  handle('op', (_e, input: Op | Op[]) => {
+    const ops = Array.isArray(input) ? input : [input]
+    for (const op of ops) {
+      if (op.type === 'add' && op.frame.kind === 'image' && !safeAssetName(op.frame.asset)) throw new Error('Unsafe image asset path.')
+    }
+    store.dispatch(input)
+  })
+  handle('edit:native', (_e, command: unknown) => nativeEdit(z.enum(['copy', 'cut', 'paste', 'selectAll', 'undo', 'redo']).parse(command)))
+  handle('frames:command', async (_e, command: unknown) => {
+    try {
+      await frameCommands.run(command)
+    } catch (err) {
+      send('frames:error', err instanceof Error ? err.message : String(err))
+    }
+  })
   handle('history', (_e, direction: 'undo' | 'redo') => store.travel(direction))
   handle('select', (_e, ids: FrameId[]) => {
-    store.selection = ids
+    store.selection = z.array(frameIdSchema).parse(ids).filter((id) => findFrame(store.doc, id))
+    send('selection', store.selection)
   })
   handle('browser', async (_e, action: string, arg?: unknown) => {
     switch (action) {
@@ -367,7 +399,10 @@ app.whenReady().then(async () => {
   }
   agent = new Agent(mcpUrl, () => store.dir)
 
-  store.on('change', (doc) => send('doc', doc))
+  store.on('change', (doc) => {
+    send('doc', doc)
+    send('selection', store.selection)
+  })
   browser.on('state', (s) => send('browser:state', s))
   browser.view.webContents.on('did-navigate', (_e, url) => rememberUrl(url))
   browser.on('pick', (pick) => {

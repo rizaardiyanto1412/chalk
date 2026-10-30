@@ -4,6 +4,7 @@ import { api, type BrowserState, type InitState, type ProjectTab } from './api'
 import { Canvas, type CanvasHandle, type CanvasTool } from './Canvas'
 import { BrowserPane } from './BrowserPane'
 import { Chat } from './Chat'
+import { nativeEditing } from './editFocus'
 import { Icon, type IconName } from './icons'
 
 type LeftTab = 'agent' | 'frames'
@@ -28,6 +29,7 @@ export function App() {
   const [status, setStatus] = useState<AgentStatus>('idle')
   const [zoom, setZoom] = useState(1)
   const [exportActivity, setExportActivity] = useState<ExportActivity | null>(null)
+  const [frameError, setFrameError] = useState<string | null>(null)
   const canvas = useRef<CanvasHandle>(null)
 
   const select = useCallback((ids: FrameId[]) => {
@@ -52,6 +54,8 @@ export function App() {
     })
     const offs = [
       api.on.exportActivity(setExportActivity),
+      api.on.selection(setSelection),
+      api.on.frameError(setFrameError),
       api.on.doc(setDoc),
       api.on.tabs(setTabs),
       api.on.recentUrls(setRecent),
@@ -69,8 +73,7 @@ export function App() {
       api.on.agentEvent((e) => setEvents((prev) => [...prev, e])),
       api.on.agentStatus(setStatus),
       api.on.history((direction) => {
-        const t = document.activeElement
-        if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) document.execCommand(direction)
+        if (nativeEditing()) void api.nativeEdit(direction)
         else void api.history(direction)
       }),
       api.on.focus((t) => {
@@ -91,8 +94,7 @@ export function App() {
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      const t = document.activeElement
-      if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || e.metaKey || e.ctrlKey) return
+      if (nativeEditing() || e.metaKey || e.ctrlKey) return
       if (e.key === 'v') setTool('select')
       if (e.key === 'h') setTool('hand')
     }
@@ -207,6 +209,8 @@ export function App() {
             <ToolButton icon="panel" label={leftOpen ? 'Hide panel' : 'Show panel'} onClick={() => setLeftOpen(!leftOpen)} />
             <span className="strip-sep" />
             <ToolButton icon="pointer" label="Select (V)" on={tool === 'select'} onClick={() => setTool('select')} />
+            <ToolButton icon="frame" label="Add Desktop frame (1440 × 900)" onClick={() => void api.frameCommand({ type: 'create', preset: 'desktop' })} />
+            <ToolButton icon="file" label="Add Mobile frame (390 × 844)" onClick={() => void api.frameCommand({ type: 'create', preset: 'mobile' })} />
             <ToolButton icon="hand" label="Hand (H)" on={tool === 'hand'} onClick={() => setTool('hand')} />
             <span className="strip-sep" />
             <ToolButton icon="globe" label={browserOpen ? 'Hide browser' : 'Show browser'} on={browserOpen} onClick={() => openBrowser(!browserOpen)} />
@@ -223,6 +227,12 @@ export function App() {
                     ? `Saved ${exportActivity.path}`
                     : exportActivity.status === 'copied' ? 'PNG copied to clipboard.' : 'Export canceled.'}</span>
                 {exportActivity.status !== 'busy' && <button aria-label="Dismiss export notice" onClick={() => setExportActivity(null)}><Icon name="x" size={12} /></button>}
+              </div>
+            )}
+            {frameError && (
+              <div className="export-notice is-error frame-notice" role="alert">
+                <span>{frameError}</span>
+                <button aria-label="Dismiss frame notice" onClick={() => setFrameError(null)}><Icon name="x" size={12} /></button>
               </div>
             )}
             <div className="zoom-controls">

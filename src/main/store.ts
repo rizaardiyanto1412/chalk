@@ -10,6 +10,7 @@ const LEGACY_DOC_FILE = 'easel.json'
 export class Store extends EventEmitter {
   doc: Doc = emptyDoc()
   dir = ''
+  projectEpoch = 0
   selection: FrameId[] = []
   browserPick: BrowserPick | null = null
   private saveTimer: NodeJS.Timeout | null = null
@@ -20,6 +21,7 @@ export class Store extends EventEmitter {
     this.flush()
     mkdirSync(join(dir, 'assets'), { recursive: true })
     this.dir = dir
+    this.projectEpoch++
     try {
       const file = [DOC_FILE, LEGACY_DOC_FILE].map((f) => join(dir, f)).find((f) => existsSync(f)) ?? join(dir, DOC_FILE)
       this.doc = parseDoc(JSON.parse(readFileSync(file, 'utf8')))
@@ -32,14 +34,26 @@ export class Store extends EventEmitter {
     this.emit('change', this.doc)
   }
 
-  dispatch(op: Op): Doc {
+  dispatch(input: Op | Op[]): Doc {
+    let next = this.doc
+    const now = Date.now()
+    for (const op of Array.isArray(input) ? input : [input]) {
+      if ((op.type === 'patch' || op.type === 'delete') && !next.frames.some((f) => f.id === op.id)) continue
+      next = applyOp(next, op, now)
+    }
+    this.pruneSelection(next)
+    if (next === this.doc) return this.doc
     this.past = [...this.past.slice(-99), this.doc]
     this.future = []
-    this.doc = applyOp(this.doc, op)
-    if (op.type === 'delete') this.selection = this.selection.filter((id) => id !== op.id)
+    this.doc = next
     this.emit('change', this.doc)
     this.scheduleSave()
     return this.doc
+  }
+
+  private pruneSelection(doc = this.doc): void {
+    const ids = new Set(doc.frames.map((f) => f.id))
+    this.selection = this.selection.filter((id) => ids.has(id))
   }
 
   /** Step through history. Returns false when there is nothing to undo or redo. */
@@ -49,6 +63,7 @@ export class Store extends EventEmitter {
     if (!target) return false
     to.push(this.doc)
     this.doc = target
+    this.pruneSelection()
     this.emit('change', this.doc)
     this.scheduleSave()
     return true

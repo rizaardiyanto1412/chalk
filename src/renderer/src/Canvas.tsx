@@ -1,6 +1,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { EXPORT_FORMATS, type Doc, type Frame, type FrameId } from '../../shared/model'
 import { api } from './api'
+import { nativeEditing, selectedText } from './editFocus'
 import { Icon } from './icons'
 
 interface Camera {
@@ -119,16 +120,12 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
   }, [])
 
   useEffect(() => {
-    const typing = () => {
-      const t = document.activeElement
-      return t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || (t as HTMLElement | null)?.isContentEditable
-    }
     const down = (e: KeyboardEvent) => {
-      if (typing()) return
+      if (nativeEditing() || selectedText()) return
       if (e.code === 'Space') setSpace(true)
-      else if ((e.key === 'Backspace' || e.key === 'Delete') && selection.length) {
-        selection.forEach((id) => api.op({ type: 'delete', id }))
-        onSelect([])
+      else if (e.key === 'Backspace' || e.key === 'Delete') {
+        e.preventDefault()
+        void api.frameCommand({ type: 'delete' })
       } else if (e.key === 'Escape') {
         setLive(null)
         onSelect([])
@@ -155,11 +152,30 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
     }
   }, [selection, onSelect, fit, fitRect, doc.frames, zoomBy])
 
+  useEffect(() => api.on.edit((command) => {
+    if (nativeEditing() || selectedText()) {
+      if (command !== 'duplicate') void api.nativeEdit(command)
+      return
+    }
+    if (command === 'selectAll') {
+      void api.frameCommand({ type: 'selectAll' })
+      return
+    }
+    if (command === 'paste') {
+      const el = host.current
+      if (el) void api.frameCommand({ type: 'paste', anchor: { x: (el.clientWidth / 2 - cam.x) / cam.zoom, y: (el.clientHeight / 2 - cam.y) / cam.zoom } })
+      return
+    }
+    void api.frameCommand({ type: command })
+  }), [cam, doc.frames, selection, onSelect])
+
   const onPointerDown = (e: React.PointerEvent) => {
     const target = e.target as HTMLElement
     const frameEl = target.closest<HTMLElement>('[data-frame-id]')
     const handle = target.closest<HTMLElement>('[data-handle]')
     if (target.closest('[data-toolbar]')) return
+    host.current?.focus()
+    window.getSelection()?.removeAllRanges()
     host.current!.setPointerCapture(e.pointerId)
     const panTool = space || tool === 'hand'
     if (panTool || e.button === 1 || !frameEl) {
@@ -211,6 +227,7 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
   return (
     <div
       ref={host}
+      tabIndex={-1}
       className={`canvas ${space || tool === 'hand' ? 'is-space' : ''} ${panning ? 'is-panning' : ''}`}
       onDragOver={(e) => {
         if ([...e.dataTransfer.items].some((i) => i.type.startsWith('image/'))) e.preventDefault()

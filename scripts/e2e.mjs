@@ -10,6 +10,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 import { checkExports } from './export-e2e.mjs'
+import { checkFrames } from './frames-e2e.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const artifacts = process.env.CHALK_E2E_ARTIFACTS || join(root, 'e2e-artifacts')
@@ -20,9 +21,14 @@ const results = []
 const check = async (name, fn) => {
   const t = Date.now()
   try {
-    await fn()
-    results.push(['PASS', name, Date.now() - t])
-    console.log(`PASS  ${name}`)
+    const result = await fn()
+    if (result?.skip) {
+      results.push(['SKIP', name, Date.now() - t])
+      console.log(`SKIP  ${name}\n      ${result.skip}`)
+    } else {
+      results.push(['PASS', name, Date.now() - t])
+      console.log(`PASS  ${name}`)
+    }
   } catch (err) {
     results.push(['FAIL', name, Date.now() - t])
     console.log(`FAIL  ${name}\n      ${err.stack?.split('\n').join('\n      ')}`)
@@ -494,8 +500,12 @@ await check('Undo restores a deleted frame and Redo deletes it again', async () 
   await win.waitForFunction(() => document.querySelectorAll('.layer').length === 1)
 })
 
+const framesClient = await mcp()
+await checkFrames({ app, win, client: framesClient, call, json, check, project, artifacts })
+await framesClient.close()
 await app.close()
 site.close()
 const failed = results.filter((r) => r[0] === 'FAIL').length
-console.log(`\n${results.length - failed}/${results.length} passed. Artifacts: ${artifacts}`)
+const skipped = results.filter((r) => r[0] === 'SKIP').length
+console.log(`\n${results.length - failed - skipped}/${results.length} passed, ${skipped} skipped. Artifacts: ${artifacts}`)
 process.exit(failed ? 1 : 0)

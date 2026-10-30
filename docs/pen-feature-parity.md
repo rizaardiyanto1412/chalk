@@ -7,7 +7,7 @@ The overnight run starts from Chalk commit `15e49c6` with 34 passing Electron ch
 | Priority | Capability | Chalk at baseline | Overnight status | Pen evidence |
 | --- | --- | --- | --- | --- |
 | 1 | Image export and PNG clipboard | HTML export and copy exist; no PNG or JPEG export or image clipboard. | Verified PNG/JPEG/HTML/PDF export, PNG clipboard, toolbar/File menu and shared MCP. 48 Electron checks pass. | `out/menu.js` export selection menu; editor `copy-as-png` command. |
-| 2 | Manual frames, duplication, frame clipboard | Frames require agent output or image import. | Planned next. | Editor frame tool, duplicate command, paste commands. |
+| 2 | Manual frames, duplication, frame clipboard | Frames require agent output or image import. | Verified desktop/mobile creation, mixed duplication, frame clipboard across projects, and atomic undo. Native browser OS-focus check remains skipped on locked macOS. | Editor frame tool, duplicate command, paste commands. |
 | 3 | Selection inspector and arrangement | Rename and resize exist. Shift selects several frames, but drag moves one. | Planned next. | Editor alignment, nudge, select-all, stacking commands. |
 | 4 | Responsive browser presets | Browser uses sidebar width. | Queued. | Browser device handling and device dimensions in editor bundle. |
 | 5 | Persistent conversations | Messages and session state remain in memory. | Queued. | `out/chat-store.js`; `out/chat-database.js`. |

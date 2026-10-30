@@ -272,12 +272,25 @@ export async function checkExports({ app, win, client, call, json, check, projec
 
     await check('untrusted image asset traversal and symbolic links fail at the export boundary', async () => {
       const unsafe = { id: 'unsafe-export-fixture', kind: 'image', name: 'Unsafe', asset: '../chalk.json', width: 200, height: 100, x: 0, y: 0, updatedAt: Date.now() }
-      await win.evaluate((frame) => window.chalk.invoke('op', { type: 'add', frame }), unsafe)
+      await assert.rejects(win.evaluate((frame) => window.chalk.invoke('op', { type: 'add', frame }), unsafe), /Unsafe image asset path/)
+      const legacyProject = mkdtempSync(join(tmpdir(), 'chalk-export-legacy-'))
+      writeFileSync(join(legacyProject, 'chalk.json'), JSON.stringify({ version: 1, frames: [unsafe] }))
+      await app.evaluate(({ dialog }, dir) => {
+        globalThis.originalLegacyOpenDialog = dialog.showOpenDialog
+        dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] })
+      }, legacyProject)
+      try {
+        await win.evaluate(() => window.chalk.invoke('project', 'open'))
+        const legacy = await client.callTool({ name: 'export_frame', arguments: { id: unsafe.id, format: 'html' } })
+        assert.equal(legacy.isError, true)
+        assert.match(legacy.content[0].text, /Unsafe asset path/)
+        assert.equal((await win.evaluate(() => window.chalk.invoke('init'))).doc.frames.length, 1)
+      } finally {
+        await win.evaluate((dir) => window.chalk.invoke('project', 'switch', dir), project)
+        await app.evaluate(({ dialog }) => { dialog.showOpenDialog = globalThis.originalLegacyOpenDialog })
+      }
       const link = join(project, 'assets', 'export-escape.png')
       try {
-        const bad = await client.callTool({ name: 'export_frame', arguments: { id: unsafe.id, format: 'html' } })
-        assert.equal(bad.isError, true)
-        assert.match(bad.content[0].text, /Unsafe asset path/)
         symlinkSync(join(project, 'chalk.json'), link)
         await win.evaluate((frame) => window.chalk.invoke('op', { type: 'add', frame }), { ...unsafe, id: 'link-export-fixture', asset: 'export-escape.png' })
         const escaped = await client.callTool({ name: 'export_frame', arguments: { id: 'link-export-fixture', format: 'png' } })
@@ -285,7 +298,6 @@ export async function checkExports({ app, win, client, call, json, check, projec
         assert.match(escaped.content[0].text, /missing or unsafe/)
       } finally {
         if (existsSync(link)) unlinkSync(link)
-        await call(client, 'delete_frame', { id: unsafe.id })
         const frames = json(await call(client, 'get_canvas')).frames
         if (frames.some((f) => f.id === 'link-export-fixture')) await call(client, 'delete_frame', { id: 'link-export-fixture' })
       }
@@ -307,6 +319,7 @@ export async function checkExports({ app, win, client, call, json, check, projec
     })
 
     await check('pending UI and MCP exports retain the original frame, assets, and project across project switches', async () => {
+      await select(imageId)
       const otherProject = mkdtempSync(join(tmpdir(), 'chalk-export-switch-'))
       const destination = join(artifacts, 'snapshot-switch.png')
       const imageFrame = (await win.evaluate(() => window.chalk.invoke('init'))).doc.frames.find((frame) => frame.id === imageId)
