@@ -15,7 +15,7 @@ type Gesture =
   | { kind: 'move'; id: FrameId; sx: number; sy: number; fx: number; fy: number; moved: boolean }
   | { kind: 'resize'; id: FrameId; sx: number; sy: number; w: number; h: number }
 
-type Draft = Partial<Record<FrameId, Pick<Frame, 'x' | 'y' | 'width' | 'height'>>>
+type Draft = Partial<Record<FrameId, Partial<Pick<Frame, 'x' | 'y' | 'width' | 'height'>>>>
 
 export interface CanvasHandle {
   focusFrame: (id: FrameId) => void
@@ -180,13 +180,9 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
       const dy = (e.clientY - g.sy) / cam.zoom
       if (!g.moved && Math.hypot(dx, dy) * cam.zoom < 3) return
       g.moved = true
-      const f = doc.frames.find((fr) => fr.id === g.id)!
-      setDraft({ [g.id]: { x: Math.round(g.fx + dx), y: Math.round(g.fy + dy), width: f.width, height: f.height } })
+      setDraft({ [g.id]: { x: Math.round(g.fx + dx), y: Math.round(g.fy + dy) } })
     } else if (g.kind === 'resize') {
-      const f = doc.frames.find((fr) => fr.id === g.id)!
-      setDraft({
-        [g.id]: { x: f.x, y: f.y, width: Math.max(200, Math.round(g.w + (e.clientX - g.sx) / cam.zoom)), height: Math.max(100, Math.round(g.h + (e.clientY - g.sy) / cam.zoom)) }
-      })
+      setDraft({ [g.id]: { width: Math.max(200, Math.round(g.w + (e.clientX - g.sx) / cam.zoom)), height: Math.max(100, Math.round(g.h + (e.clientY - g.sy) / cam.zoom)) } })
     }
   }
 
@@ -195,7 +191,7 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
     gesture.current = { kind: 'idle' }
     if (g.kind === 'move' || g.kind === 'resize') {
       const d = draft[g.id]
-      if (d) void api.op({ type: 'patch', id: g.id, patch: d })
+      if (d && doc.frames.some((f) => f.id === g.id)) void api.op({ type: 'patch', id: g.id, patch: d })
       setDraft({})
     }
   }
@@ -310,13 +306,14 @@ function FrameView({ title, src }: { title: string; src: string }) {
   }, [src, shown])
   return (
     <>
-      <iframe key={shown} title={title} src={shown} scrolling="no" />
+      <iframe key={shown} title={title} src={shown} scrolling="no" sandbox="allow-scripts" />
       {pending && (
         <iframe
           key={pending}
           title={title}
           src={pending}
           scrolling="no"
+          sandbox="allow-scripts"
           className="is-pending"
           onLoad={() => setTimeout(() => {
             setShown(pending)

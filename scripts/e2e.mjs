@@ -201,6 +201,42 @@ await check('Pick element sends the clicked element to the agent context', async
   assert.equal(c.browserPick.text, 'Home')
 })
 
+await check('a hostile frame cannot navigate the app window or call MCP', async () => {
+  const before = win.url()
+  const html = `<div class="p-8">hostile</div><script>try { top.location = 'https://example.com' } catch {} fetch('/mcp', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'delete_frame', arguments: { id: '${frameId}' } } }) }).catch(() => {})</script>`
+  const out = json(await call(client, 'create_frame', { name: 'Hostile', html }))
+  await win.locator('.segmented button:has-text("Canvas")').click()
+  await win.waitForSelector(`[data-frame-id="${out.created.id}"] iframe[sandbox="allow-scripts"]`)
+  await win.waitForTimeout(1500)
+  assert.equal(win.url(), before, 'app window stayed on the app')
+  assert.ok(json(await call(client, 'get_canvas')).frames.some((f) => f.id === frameId), 'MCP call from the frame was refused')
+  await call(client, 'delete_frame', { id: out.created.id })
+})
+
+await check('a page cannot forge or crash the pick channel through the console', async () => {
+  await app.evaluate(async ({ webContents }, site) => {
+    const wc = webContents.getAllWebContents().find((w) => w.getURL().startsWith(site))
+    await wc.executeJavaScript(`console.log('__EASEL_PICK__{'); console.log('__easel_pick_x__' + JSON.stringify({ tag: 'forged' }))`)
+  }, SITE)
+  await win.waitForTimeout(300)
+  const c = json(await call(client, 'get_canvas'))
+  assert.equal(c.browserPick.tag, 'h1', 'pick unchanged')
+})
+
+await check('one Undo reverts an agent edit and its height change together', async () => {
+  const before = json(await call(client, 'get_canvas')).frames.find((f) => f.id === frameId)
+  await call(client, 'edit_frame', { id: frameId, edits: [{ find: 'min-h-[1200px]', replace: 'min-h-[1500px]' }] })
+  const edited = json(await call(client, 'get_canvas')).frames.find((f) => f.id === frameId)
+  assert.equal(edited.height, 1500)
+  await app.evaluate(({ Menu, BrowserWindow }) => {
+    Menu.getApplicationMenu().items.find((i) => i.label === 'Edit').submenu.items.find((i) => i.label === 'Undo').click(undefined, BrowserWindow.getAllWindows()[0])
+  })
+  await win.waitForTimeout(300)
+  const after = json(await call(client, 'get_canvas')).frames.find((f) => f.id === frameId)
+  assert.equal(after.height, before.height)
+  assert.match((await call(client, 'get_frame', { id: frameId }))[0].text, /min-h-\[1200px\]/)
+})
+
 await check('MCP refuses requests that carry a browser Origin header', async () => {
   const res = await fetch(`http://127.0.0.1:${PORT}/mcp`, { method: 'POST', headers: { origin: 'https://evil.example', 'content-type': 'application/json' }, body: '{}' })
   assert.equal(res.status, 403)

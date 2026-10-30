@@ -15,6 +15,8 @@ export interface ToolContext {
   store: Store
   browser: Browser
   frameUrl: (frame: Frame) => string
+  /** Render HTML that is not on the canvas yet and return its content height. */
+  measure: (html: string, width: number) => Promise<number>
   /** Tell the UI what the agent is touching so the user can watch it. */
   focus: (target: { mode: 'canvas'; frameId?: FrameId } | { mode: 'browser' }) => void
 }
@@ -34,15 +36,20 @@ const text = (value: unknown): Content => ({ type: 'text', text: typeof value ==
 const MAX_EDGE = 7800
 const MAX_BYTES = 3_500_000
 
-/** Keep images inside the model's size limits: scale down tall captures, fall back to JPEG when large. */
+/** Keep images inside the model's size limits: scale down tall captures, then JPEG, then shrink until it fits. */
 function image(png: Buffer): Content {
-  let img = nativeImage.createFromBuffer(png)
-  const { width, height } = img.getSize()
-  const scale = Math.min(1, MAX_EDGE / Math.max(width, height))
-  if (scale < 1) img = img.resize({ width: Math.round(width * scale), height: Math.round(height * scale), quality: 'best' })
-  const out = img.toPNG()
-  if (out.length <= MAX_BYTES) return { type: 'image', data: out.toString('base64'), mimeType: 'image/png' }
-  return { type: 'image', data: img.toJPEG(82).toString('base64'), mimeType: 'image/jpeg' }
+  const src = nativeImage.createFromBuffer(png)
+  const { width, height } = src.getSize()
+  let scale = Math.min(1, MAX_EDGE / Math.max(width, height))
+  const at = (s: number) => (s < 1 ? src.resize({ width: Math.round(width * s), height: Math.round(height * s), quality: 'best' }) : src)
+  const asPng = at(scale).toPNG()
+  if (asPng.length <= MAX_BYTES) return { type: 'image', data: asPng.toString('base64'), mimeType: 'image/png' }
+  let jpeg = at(scale).toJPEG(82)
+  while (jpeg.length > MAX_BYTES && scale > 0.05) {
+    scale *= 0.75
+    jpeg = at(scale).toJPEG(78)
+  }
+  return { type: 'image', data: jpeg.toString('base64'), mimeType: 'image/jpeg' }
 }
 
 function frameSummary(f: Frame) {
@@ -61,11 +68,17 @@ function requireHtml(ctx: ToolContext, id: string): HtmlFrame {
   return f
 }
 
-async function fitHeight(ctx: ToolContext, id: FrameId): Promise<Frame> {
-  const f = requireFrame(ctx, id)
-  const { contentHeight } = await renderUrl(ctx.frameUrl(f), f.width)
-  if (contentHeight !== f.height) ctx.store.dispatch({ type: 'patch', id, patch: { height: Math.max(contentHeight, 100) } })
-  return requireFrame(ctx, id)
+const fitted = async (ctx: ToolContext, html: string, width: number) => Math.max(100, await ctx.measure(html, width))
+
+function applyEdits(source: string, edits: { find: string; replace: string }[]): string {
+  let html = source
+  for (const [i, e] of edits.entries()) {
+    const at = html.indexOf(e.find)
+    if (at < 0) throw new Error(`Edit ${i + 1}: text not found. Call get_frame and copy the exact text.`)
+    if (html.indexOf(e.find, at + 1) >= 0) throw new Error(`Edit ${i + 1}: text appears more than once. Include more surrounding text.`)
+    html = html.slice(0, at) + e.replace + html.slice(at + e.find.length)
+  }
+  return html
 }
 
 const newId = () => randomUUID().slice(0, 8) as FrameId
@@ -121,16 +134,17 @@ export const TOOLS: Tool[] = [
       near_frame_id: z.string().optional()
     },
     run: async (a, ctx) => {
+      const width = a.width ?? 1440
+      const height = a.height ?? (await fitted(ctx, a.html, width))
       const near = a.near_frame_id ? findFrame(ctx.store.doc, a.near_frame_id) : undefined
       const slot = near ? { x: near.x + near.width + FRAME_GAP, y: near.y } : nextSlot(ctx.store.doc)
       const id = newId()
       ctx.store.dispatch({
         type: 'add',
-        frame: { id, kind: 'html', name: a.name, html: a.html, width: a.width ?? 1440, height: a.height ?? 900, x: a.x ?? slot.x, y: a.y ?? slot.y, updatedAt: Date.now() }
+        frame: { id, kind: 'html', name: a.name, html: a.html, width, height, x: a.x ?? slot.x, y: a.y ?? slot.y, updatedAt: Date.now() }
       })
       ctx.focus({ mode: 'canvas', frameId: id })
-      const f = a.height ? requireFrame(ctx, id) : await fitHeight(ctx, id)
-      return [text({ created: frameSummary(f), next: 'Call screenshot_frame to review it.' })]
+      return [text({ created: frameSummary(requireFrame(ctx, id)), next: 'Call screenshot_frame to review it.' })]
     }
   }),
   tool({
@@ -148,11 +162,12 @@ export const TOOLS: Tool[] = [
     run: async ({ id, ...patch }, ctx) => {
       const f = requireFrame(ctx, id)
       if (patch.html !== undefined && f.kind !== 'html') throw new Error('Screenshot frames have no HTML.')
-      ctx.store.dispatch({ type: 'patch', id: f.id, patch })
-      ctx.focus({ mode: 'canvas', frameId: f.id })
       const refit = f.kind === 'html' && patch.height === undefined && (patch.html !== undefined || patch.width !== undefined)
-      const out = refit ? await fitHeight(ctx, f.id) : requireFrame(ctx, f.id)
-      return [text({ updated: frameSummary(out) })]
+      const height = refit ? await fitted(ctx, patch.html ?? (f as HtmlFrame).html, patch.width ?? f.width) : patch.height
+      requireFrame(ctx, f.id)
+      ctx.store.dispatch({ type: 'patch', id: f.id, patch: { ...patch, ...(height !== undefined ? { height } : {}) } })
+      ctx.focus({ mode: 'canvas', frameId: f.id })
+      return [text({ updated: frameSummary(requireFrame(ctx, f.id)) })]
     }
   }),
   tool({
@@ -161,17 +176,13 @@ export const TOOLS: Tool[] = [
     input: { id: z.string(), edits: z.array(z.object({ find: z.string().min(1), replace: z.string() })).min(1) },
     run: async ({ id, edits }, ctx) => {
       const f = requireHtml(ctx, id)
-      let html = f.html
-      for (const [i, e] of edits.entries()) {
-        const at = html.indexOf(e.find)
-        if (at < 0) throw new Error(`Edit ${i + 1}: text not found. Call get_frame and copy the exact text.`)
-        if (html.indexOf(e.find, at + 1) >= 0) throw new Error(`Edit ${i + 1}: text appears more than once. Include more surrounding text.`)
-        html = html.slice(0, at) + e.replace + html.slice(at + e.find.length)
-      }
-      ctx.store.dispatch({ type: 'patch', id: f.id, patch: { html } })
+      const html = applyEdits(f.html, edits)
+      const height = await fitted(ctx, html, f.width)
+      // Re-apply on the latest HTML so an edit that landed while we measured is kept.
+      const latest = requireHtml(ctx, id)
+      ctx.store.dispatch({ type: 'patch', id: f.id, patch: { html: latest.html === f.html ? html : applyEdits(latest.html, edits), height } })
       ctx.focus({ mode: 'canvas', frameId: f.id })
-      const out = await fitHeight(ctx, f.id)
-      return [text({ updated: frameSummary(out), editsApplied: edits.length })]
+      return [text({ updated: frameSummary(requireFrame(ctx, f.id)), editsApplied: edits.length })]
     }
   }),
   tool({

@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import { promises as fs, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { applyOp, emptyDoc, parseDoc, type Doc, type FrameId, type Op, type BrowserPick } from '../shared/model'
 
@@ -57,23 +57,19 @@ export class Store extends EventEmitter {
 
   private scheduleSave(): void {
     if (this.saveTimer) clearTimeout(this.saveTimer)
-    this.saveTimer = setTimeout(() => void this.save(), 250)
+    this.saveTimer = setTimeout(() => this.flush(), 250)
   }
 
-  private async save(): Promise<void> {
-    this.saveTimer = null
-    const file = join(this.dir, DOC_FILE)
-    const tmp = `${file}.tmp`
-    await fs.writeFile(tmp, JSON.stringify(this.doc, null, 2))
-    await fs.rename(tmp, file)
-  }
-
-  /** Write pending changes now. Called before switching projects and on quit. */
+  /**
+   * Write pending changes now, atomically. Synchronous on purpose: one writer at a time means an older
+   * save can never land after a newer one. Called by the debounce, before switching projects, and on quit.
+   */
   flush(): void {
     if (!this.saveTimer || !this.dir) return
     clearTimeout(this.saveTimer)
     this.saveTimer = null
     const file = join(this.dir, DOC_FILE)
-    writeFileSync(file, JSON.stringify(this.doc, null, 2))
+    writeFileSync(`${file}.tmp`, JSON.stringify(this.doc, null, 2))
+    renameSync(`${file}.tmp`, file)
   }
 }

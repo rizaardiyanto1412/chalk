@@ -6,7 +6,9 @@ import type { Server } from 'node:http'
 import { findFrame, type FrameId, type Op } from '../shared/model'
 import { Store } from './store'
 import { Browser } from './browser'
-import { startServer, DEFAULT_PORT } from './server'
+import { startServer, DEFAULT_PORT, previews } from './server'
+import { renderUrl } from './render'
+import { randomUUID } from 'node:crypto'
 import type { ToolContext } from './tools'
 import { Agent, findClaude, MODELS } from './agent'
 import { frameDocument } from './frameHtml'
@@ -50,6 +52,13 @@ async function chooseProject(create: boolean): Promise<void> {
   openProject(dir)
 }
 
+/** Text fields in the built-in browser keep their own undo; everything else goes to the renderer. */
+function history(direction: 'undo' | 'redo'): void {
+  const page = browser.view.webContents
+  if (page.isFocused()) return direction === 'undo' ? page.undo() : page.redo()
+  send('history', direction)
+}
+
 function buildMenu(): void {
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
@@ -67,8 +76,8 @@ function buildMenu(): void {
       {
         label: 'Edit',
         submenu: [
-          { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => send('history', 'undo') },
-          { label: 'Redo', accelerator: 'CmdOrCtrl+Shift+Z', click: () => send('history', 'redo') },
+          { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => history('undo') },
+          { label: 'Redo', accelerator: 'CmdOrCtrl+Shift+Z', click: () => history('redo') },
           { type: 'separator' },
           { role: 'cut' },
           { role: 'copy' },
@@ -98,8 +107,21 @@ async function listen(ctx: ToolContext): Promise<void> {
   throw new Error(`Ports ${port}-${port + 9} are all in use.`)
 }
 
+/** Only the app's own top-level page may call IPC. Frame designs and other pages may not. */
+function trusted(e: Electron.IpcMainInvokeEvent): boolean {
+  const url = e.senderFrame?.url ?? ''
+  return e.sender === win?.webContents && e.senderFrame === win.webContents.mainFrame && (url.startsWith('file://') || (!!process.env.ELECTRON_RENDERER_URL && url.startsWith(process.env.ELECTRON_RENDERER_URL)))
+}
+
+function handle(channel: string, fn: (e: Electron.IpcMainInvokeEvent, ...args: any[]) => unknown): void {
+  ipcMain.handle(channel, (e, ...args) => {
+    if (!trusted(e)) throw new Error('untrusted sender')
+    return fn(e, ...args)
+  })
+}
+
 function registerIpc(): void {
-  ipcMain.handle('init', () => ({
+  handle('init', () => ({
     doc: store.doc,
     project: { dir: store.dir, name: basename(store.dir) },
     port,
@@ -109,12 +131,12 @@ function registerIpc(): void {
     browser: browser.state(),
     agentStatus: agent.status
   }))
-  ipcMain.handle('op', (_e, op: Op) => void store.dispatch(op))
-  ipcMain.handle('history', (_e, direction: 'undo' | 'redo') => store.travel(direction))
-  ipcMain.handle('select', (_e, ids: FrameId[]) => {
+  handle('op', (_e, op: Op) => void store.dispatch(op))
+  handle('history', (_e, direction: 'undo' | 'redo') => store.travel(direction))
+  handle('select', (_e, ids: FrameId[]) => {
     store.selection = ids
   })
-  ipcMain.handle('browser', async (_e, action: string, arg?: unknown) => {
+  handle('browser', async (_e, action: string, arg?: unknown) => {
     switch (action) {
       case 'bounds':
         return browser.setBounds(arg as Electron.Rectangle)
@@ -139,13 +161,13 @@ function registerIpc(): void {
       }
     }
   })
-  ipcMain.handle('agent:send', (_e, { text, model }: { text: string; model: string }) => {
+  handle('agent:send', (_e, { text, model }: { text: string; model: string }) => {
     const selectedFrames = store.selection.flatMap((id) => findFrame(store.doc, id) ?? [])
     void agent.send(text, { selectedFrames, browserPick: store.browserPick, browserUrl: browser.state().url }, model)
   })
-  ipcMain.handle('agent:stop', () => agent.stop())
-  ipcMain.handle('agent:reset', () => agent.reset())
-  ipcMain.handle('frame', async (_e, action: string, id: string) => {
+  handle('agent:stop', () => agent.stop())
+  handle('agent:reset', () => agent.reset())
+  handle('frame', async (_e, action: string, id: string) => {
     const f = findFrame(store.doc, id)
     if (!f) return
     const html = f.kind === 'html' ? frameDocument(f) : ''
@@ -156,8 +178,8 @@ function registerIpc(): void {
       if (!res.canceled && res.filePath) writeFileSync(res.filePath, html)
     }
   })
-  ipcMain.handle('clipboard', (_e, text: string) => clipboard.writeText(text))
-  ipcMain.handle('project', (_e, action: 'new' | 'open' | 'reveal') => (action === 'reveal' ? shell.openPath(store.dir) : chooseProject(action === 'new')))
+  handle('clipboard', (_e, text: string) => clipboard.writeText(text))
+  handle('project', (_e, action: 'new' | 'open' | 'reveal') => (action === 'reveal' ? shell.openPath(store.dir) : chooseProject(action === 'new')))
 }
 
 let toolContext: ToolContext
@@ -175,6 +197,14 @@ function createWindow(): void {
     webPreferences: { preload: join(import.meta.dirname, '../preload/index.cjs'), sandbox: false }
   })
   browser.attach(win)
+  win.webContents.on('will-navigate', (e) => e.preventDefault())
+  win.webContents.on('will-frame-navigate', (e) => {
+    if (e.isMainFrame) e.preventDefault()
+  })
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
   if (process.env.ELECTRON_RENDERER_URL) void win.loadURL(process.env.ELECTRON_RENDERER_URL)
   else void win.loadFile(join(import.meta.dirname, '../renderer/index.html'))
   win.on('closed', () => {
@@ -195,6 +225,15 @@ app.whenReady().then(async () => {
     store,
     browser,
     frameUrl: (f) => `http://127.0.0.1:${port}/frame/${f.id}?v=${f.updatedAt}`,
+    measure: async (html, width) => {
+      const token = randomUUID()
+      previews.set(token, html)
+      try {
+        return (await renderUrl(`http://127.0.0.1:${port}/preview/${token}`, width)).contentHeight
+      } finally {
+        previews.delete(token)
+      }
+    },
     focus: (target) => send('focus', target)
   }
   agent = new Agent(mcpUrl, () => store.dir)

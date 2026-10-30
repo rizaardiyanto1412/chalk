@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events'
+import { randomUUID } from 'node:crypto'
 import { WebContentsView, type BaseWindow, type Rectangle } from 'electron'
 import type { BrowserPick } from '../shared/model'
 
@@ -11,7 +12,6 @@ export interface BrowserState {
   picking: boolean
 }
 
-const PICK_PREFIX = '__EASEL_PICK__'
 
 const SNAPSHOT_JS = `(() => {
   const MAX = 450
@@ -71,7 +71,7 @@ const STYLES_JS = `(() => {
   return { textColors: top(colors, 8), backgrounds: top(bgs, 8), fonts: top(fonts, 4), fontSizes: top(sizes, 8), radii: top(radii, 5), bodyBackground: bodyStyle.backgroundColor }
 })()`
 
-const PICK_JS = `(() => {
+const pickJs = (prefix: string) => `(() => {
   if (window.__easelPick) return
   const box = document.createElement('div')
   box.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;border:2px solid #2563eb;background:rgba(37,99,235,.08);border-radius:3px;transition:all .05s'
@@ -103,9 +103,9 @@ const PICK_JS = `(() => {
     const el = cur || e.target
     const r = el.getBoundingClientRect()
     stop()
-    console.log('${PICK_PREFIX}' + JSON.stringify({ url: location.href, selector: path(el), tag: el.tagName.toLowerCase(), text: (el.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 300), rect: { x: r.left + scrollX, y: r.top + scrollY, width: r.width, height: r.height }, outerHTML: el.outerHTML.slice(0, 6000) }))
+    console.log('${prefix}' + JSON.stringify({ url: location.href, selector: path(el), tag: el.tagName.toLowerCase(), text: (el.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 300), rect: { x: r.left + scrollX, y: r.top + scrollY, width: r.width, height: r.height }, outerHTML: el.outerHTML.slice(0, 6000) }))
   }
-  const key = (e) => { if (e.key === 'Escape') { stop(); console.log('${PICK_PREFIX}null') } }
+  const key = (e) => { if (e.key === 'Escape') { stop(); console.log('${prefix}null') } }
   addEventListener('mousemove', move, true); addEventListener('click', click, true); addEventListener('keydown', key, true)
   window.__easelPick = stop
 })()`
@@ -113,6 +113,8 @@ const PICK_JS = `(() => {
 export class Browser extends EventEmitter {
   readonly view: WebContentsView
   private picking = false
+  /** Random per pick session, so a page cannot forge a pick by logging to the console. */
+  private pickPrefix: string | null = null
 
   constructor() {
     super()
@@ -132,11 +134,13 @@ export class Browser extends EventEmitter {
     })
     wc.on('console-message', (e) => {
       const message = (e as unknown as { message: string }).message
-      if (typeof message !== 'string' || !message.startsWith(PICK_PREFIX)) return
+      const prefix = this.pickPrefix
+      if (!prefix || typeof message !== 'string' || !message.startsWith(prefix)) return
+      this.pickPrefix = null
       this.picking = false
-      const pick = JSON.parse(message.slice(PICK_PREFIX.length)) as BrowserPick | null
-      this.emit('pick', pick)
       this.emit('state', this.state())
+      const pick = parsePick(message.slice(prefix.length))
+      if (pick !== undefined) this.emit('pick', pick)
     })
   }
 
@@ -257,13 +261,30 @@ export class Browser extends EventEmitter {
 
   async startPick(): Promise<void> {
     this.picking = true
+    this.pickPrefix = `__easel_pick_${randomUUID()}__`
     this.emit('state', this.state())
-    await this.view.webContents.executeJavaScript(PICK_JS)
+    await this.view.webContents.executeJavaScript(pickJs(this.pickPrefix))
   }
 
   async cancelPick(): Promise<void> {
     this.picking = false
+    this.pickPrefix = null
     this.emit('state', this.state())
     await this.view.webContents.executeJavaScript('window.__easelPick && window.__easelPick()').catch(() => {})
+  }
+}
+
+/** Parse a pick message from the page. `null` means the user cancelled; `undefined` means the message was malformed. */
+function parsePick(raw: string): BrowserPick | null | undefined {
+  try {
+    const p = JSON.parse(raw)
+    if (p === null) return null
+    const r = p?.rect
+    const ok =
+      typeof p.url === 'string' && typeof p.selector === 'string' && typeof p.tag === 'string' && typeof p.text === 'string' &&
+      typeof p.outerHTML === 'string' && r && ['x', 'y', 'width', 'height'].every((k) => typeof r[k] === 'number')
+    return ok ? { url: p.url, selector: p.selector, tag: p.tag, text: p.text, outerHTML: p.outerHTML, rect: { x: r.x, y: r.y, width: r.width, height: r.height } } : undefined
+  } catch {
+    return undefined
   }
 }
