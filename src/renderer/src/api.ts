@@ -24,7 +24,14 @@ export interface InitState {
   claudePath: string | null
   models: readonly { id: string; label: string }[]
   browser: BrowserState
+  recentUrls: string[]
+  tabs: ProjectTab[]
   agentStatus: AgentStatus
+}
+
+export interface ProjectTab {
+  dir: string
+  name: string
 }
 
 export type FocusTarget = { mode: 'canvas'; frameId?: FrameId } | { mode: 'browser' }
@@ -42,7 +49,8 @@ export const api = {
   resetAgent: () => e().invoke('agent:reset'),
   frame: (action: 'copy' | 'export' | 'open', id: string) => e().invoke('frame', action, id),
   copy: (text: string) => e().invoke('clipboard', text),
-  project: (action: 'new' | 'open' | 'reveal') => e().invoke('project', action),
+  project: (action: 'new' | 'open' | 'reveal' | 'switch' | 'close', dir?: string) => e().invoke('project', action, dir),
+  addImage: (img: { name: string; bytes: Uint8Array; x: number; y: number }) => e().invoke('image:add', img),
   on: {
     doc: (fn: (d: Doc) => void) => e().on('doc', fn),
     project: (fn: (p: { dir: string; name: string }) => void) => e().on('project', fn),
@@ -51,6 +59,8 @@ export const api = {
     agentEvent: (fn: (ev: AgentEvent) => void) => e().on('agent:event', fn),
     agentStatus: (fn: (s: AgentStatus) => void) => e().on('agent:status', fn),
     focus: (fn: (t: FocusTarget) => void) => e().on('focus', fn),
-    history: (fn: (direction: 'undo' | 'redo') => void) => e().on('history', fn)
+    history: (fn: (direction: 'undo' | 'redo') => void) => e().on('history', fn),
+    tabs: (fn: (t: ProjectTab[]) => void) => e().on('tabs', fn),
+    recentUrls: (fn: (u: string[]) => void) => e().on('browser:recent', fn)
   }
 }

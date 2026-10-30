@@ -56,14 +56,21 @@ const json = (content) => JSON.parse(content[0].text)
 
 let app = await launch()
 let win = await app.firstWindow()
-await win.waitForSelector('.topbar')
+await win.waitForSelector('.titlebar')
 const client = await mcp()
 let frameId
 
-await check('UI boots with canvas empty state, frames panel, agent panel', async () => {
-  await win.waitForSelector('.empty h2')
-  assert.equal(await win.locator('.layer').count(), 0)
+const framesTab = () => win.locator('.left-tabs button', { hasText: 'Frames' }).click()
+const agentTab = () => win.locator('.left-tabs button', { hasText: 'Agent' }).click()
+
+await check('UI boots with the agent panel, tool strip, project tab, and browser panel', async () => {
+  await win.waitForSelector('.agent-empty h4')
   assert.ok(await win.locator('.chat textarea').isVisible())
+  assert.equal(await win.locator('.tab.is-on').count(), 1)
+  assert.ok(await win.locator('.browser-home h3').isVisible())
+  await framesTab()
+  assert.equal(await win.locator('.layer').count(), 0)
+  await agentTab()
   await win.screenshot({ path: join(artifacts, '01-empty.png') })
 })
 
@@ -79,6 +86,7 @@ await check('create_frame adds a frame, fits height to content, and shows it on 
   assert.equal(out.created.width, 1440)
   assert.equal(out.created.height, 1200, 'height fitted from min-h-[1200px] proves Tailwind ran')
   await win.waitForSelector(`[data-frame-id="${frameId}"] iframe`)
+  await framesTab()
   assert.equal(await win.locator('.layer').count(), 1)
 })
 
@@ -115,10 +123,12 @@ await check('get_canvas reports frames and the UI selection', async () => {
   await win.screenshot({ path: join(artifacts, '03-canvas-selected.png') })
 })
 
-await check('browser_navigate loads a page and switches the UI to the Browser tab', async () => {
+await check('browser_navigate loads a page and opens the browser panel', async () => {
+  await win.locator('[aria-label="Close browser"]').click()
+  await win.waitForSelector('.browser-panel', { state: 'detached' })
   const s = json(await call(client, 'browser_navigate', { url: SITE }))
   assert.equal(s.title, 'Home')
-  await win.waitForSelector('.segmented button.is-on:has-text("Browser")')
+  await win.waitForSelector('.browser-panel')
 })
 
 await check('the native browser view is visible and covers exactly the browser area', async () => {
@@ -131,9 +141,12 @@ await check('the native browser view is visible and covers exactly the browser a
   assert.ok(view.visible)
   assert.equal(view.url, `${SITE}/`)
   for (const k of ['x', 'y', 'width', 'height']) assert.ok(Math.abs(view.bounds[k] - slot[k]) <= 1, `${k}: view ${view.bounds[k]} vs slot ${slot[k]}`)
-  await win.locator('.segmented button:has-text("Canvas")').click()
+  await win.locator('[aria-label="Close browser"]').click()
   await win.waitForTimeout(200)
-  assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].contentView.children[0].getVisible()), false, 'hidden on the Canvas tab')
+  assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].contentView.children[0].getVisible()), false, 'hidden when the panel closes')
+  await win.locator('[aria-label="Open browser"]').click()
+  await win.waitForTimeout(300)
+  assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].contentView.children[0].getVisible()), true, 'back when it reopens')
 })
 
 let snap
@@ -181,13 +194,13 @@ await check('browser_capture_to_canvas puts a screenshot frame on the canvas', a
   assert.equal(out.created.kind, 'image')
   assert.ok(out.created.height > 1800)
   await win.waitForSelector(`[data-frame-id="${out.created.id}"] img`)
+  await framesTab()
   assert.equal(await win.locator('.layer').count(), 2)
 })
 
 await check('Pick element sends the clicked element to the agent context', async () => {
-  await win.locator('.segmented button:has-text("Browser")').click()
   await call(client, 'browser_navigate', { url: SITE })
-  await win.locator('button:has-text("Pick element")').click()
+  await win.locator('[aria-label="Pick element"]').click()
   await win.waitForTimeout(200)
   const page = (await app.evaluate(({ webContents }) => webContents.getAllWebContents().map((w) => w.getURL()))).find((u) => u.startsWith(SITE))
   assert.ok(page)
@@ -205,7 +218,6 @@ await check('a hostile frame cannot navigate the app window or call MCP', async 
   const before = win.url()
   const html = `<div class="p-8">hostile</div><script>try { top.location = 'https://example.com' } catch {} fetch('/mcp', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'delete_frame', arguments: { id: '${frameId}' } } }) }).catch(() => {})</script>`
   const out = json(await call(client, 'create_frame', { name: 'Hostile', html }))
-  await win.locator('.segmented button:has-text("Canvas")').click()
   await win.waitForSelector(`[data-frame-id="${out.created.id}"] iframe[sandbox="allow-scripts"]`)
   await win.waitForTimeout(1500)
   assert.equal(win.url(), before, 'app window stayed on the app')
@@ -228,6 +240,7 @@ await check('one Undo reverts an agent edit and its height change together', asy
   await call(client, 'edit_frame', { id: frameId, edits: [{ find: 'min-h-[1200px]', replace: 'min-h-[1500px]' }] })
   const edited = json(await call(client, 'get_canvas')).frames.find((f) => f.id === frameId)
   assert.equal(edited.height, 1500)
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.focus())
   await app.evaluate(({ Menu, BrowserWindow }) => {
     Menu.getApplicationMenu().items.find((i) => i.label === 'Edit').submenu.items.find((i) => i.label === 'Undo').click(undefined, BrowserWindow.getAllWindows()[0])
   })
@@ -243,7 +256,7 @@ await check('MCP refuses requests that carry a browser Origin header', async () 
 })
 
 await check('dragging a frame on the canvas moves it and persists the move', async () => {
-  await win.locator('.segmented button:has-text("Canvas")').click()
+  await framesTab()
   await win.locator('.layer').first().click()
   await win.waitForTimeout(300)
   const label = win.locator(`[data-frame-id="${frameId}"] .frame-label`)
@@ -257,6 +270,53 @@ await check('dragging a frame on the canvas moves it and persists the move', asy
   assert.ok(f.x !== 0 || f.y !== 0, `moved to ${f.x},${f.y}`)
 })
 
+await check('dropping a PNG on the canvas adds an image frame where it lands', async () => {
+  const before = json(await call(client, 'get_canvas')).frames.length
+  const [shot] = await call(client, 'screenshot_frame', { id: frameId })
+  await win.evaluate(async (b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
+    const dt = new DataTransfer()
+    dt.items.add(new File([bytes], 'reference.png', { type: 'image/png' }))
+    const canvas = document.querySelector('.canvas')
+    const r = canvas.getBoundingClientRect()
+    for (const type of ['dragover', 'drop']) canvas.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt, clientX: r.left + 40, clientY: r.top + 40 }))
+  }, shot.data)
+  await win.waitForFunction((n) => document.querySelectorAll('[data-frame-id]').length > n, before)
+  const frames = json(await call(client, 'get_canvas')).frames
+  const dropped = frames.find((f) => f.name === 'reference')
+  assert.equal(dropped.kind, 'image')
+  assert.equal(dropped.width, 1440)
+  await call(client, 'delete_frame', { id: dropped.id })
+})
+
+await check('recent URLs show on the browser start page and clear', async () => {
+  await win.locator('.url-home').click()
+  await win.waitForSelector('.recent-row')
+  assert.ok((await win.locator('.recent-row').allInnerTexts()).some((t) => t.includes('127.0.0.1:7912')))
+  await win.locator('.recent-row', { hasText: '127.0.0.1:7912/pricing' }).click()
+  await win.waitForFunction(() => !document.querySelector('.browser-home'))
+  await win.locator('.url-home').click()
+  await win.locator('.recent-head button').click()
+  await win.waitForSelector('.recent-row', { state: 'detached' })
+})
+
+await check('hand tool pans the canvas instead of moving frames', async () => {
+  await win.keyboard.press('Escape')
+  await win.locator('[aria-label="Hand (H)"]').click()
+  const before = json(await call(client, 'get_canvas')).frames.find((f) => f.id === frameId)
+  const box = await win.locator(`[data-frame-id="${frameId}"]`).boundingBox()
+  await win.mouse.move(box.x + 20, box.y + 20)
+  await win.mouse.down()
+  await win.mouse.move(box.x + 120, box.y + 60, { steps: 5 })
+  await win.mouse.up()
+  const after = json(await call(client, 'get_canvas')).frames.find((f) => f.id === frameId)
+  assert.deepEqual([after.x, after.y], [before.x, before.y], 'frame did not move')
+  const moved = await win.locator(`[data-frame-id="${frameId}"]`).boundingBox()
+  assert.ok(Math.abs(moved.x - box.x - 100) <= 2, 'view panned')
+  await win.locator('[aria-label="Select (V)"]').click()
+})
+
+await win.screenshot({ path: join(artifacts, '06-layout.png') })
 await client.close()
 await win.waitForTimeout(400)
 await app.close()
@@ -266,6 +326,7 @@ await check('frames persist across a restart', async () => {
   assert.equal(saved.frames.length, 2)
   app = await launch()
   win = await app.firstWindow()
+  await win.locator('.left-tabs button', { hasText: 'Frames' }).click()
   await win.waitForSelector('.layer')
   assert.equal(await win.locator('.layer').count(), 2)
   await win.waitForTimeout(1200)

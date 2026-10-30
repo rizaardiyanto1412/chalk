@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shell } from 'electron'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
@@ -20,25 +20,68 @@ let agent: Agent
 let port = Number(process.env.EASEL_PORT) || DEFAULT_PORT
 let server: Server | null = null
 
+interface Config {
+  projectDir?: string
+  /** Project folders open as tabs, in tab order. */
+  projects: string[]
+  recentUrls: string[]
+}
+
 const configFile = () => join(app.getPath('userData'), 'config.json')
-const readConfig = (): { projectDir?: string } => {
+function readConfig(): Config {
   try {
-    return JSON.parse(readFileSync(configFile(), 'utf8'))
+    const c = JSON.parse(readFileSync(configFile(), 'utf8'))
+    return { projectDir: c.projectDir, projects: Array.isArray(c.projects) ? c.projects : [], recentUrls: Array.isArray(c.recentUrls) ? c.recentUrls : [] }
   } catch {
-    return {}
+    return { projects: [], recentUrls: [] }
   }
 }
-const writeConfig = (c: { projectDir: string }) => writeFileSync(configFile(), JSON.stringify(c))
+let config: Config = { projects: [], recentUrls: [] }
+/** Test runs pin a project with EASEL_PROJECT_DIR and must not touch the user's saved tabs. */
+function updateConfig(patch: Partial<Config>): void {
+  config = { ...config, ...patch }
+  if (!process.env.EASEL_PROJECT_DIR) writeFileSync(configFile(), JSON.stringify(config))
+}
+
+const tabs = () => config.projects.map((dir) => ({ dir, name: basename(dir) }))
+const MAX_RECENT = 30
 
 const mcpUrl = () => `http://127.0.0.1:${port}/mcp`
 const send = (channel: string, payload?: unknown) => win?.webContents.send(channel, payload)
 
 function openProject(dir: string): void {
+  if (dir === store.dir) return
   store.open(dir)
-  writeConfig({ projectDir: dir })
+  updateConfig({ projectDir: dir, projects: config.projects.includes(dir) ? config.projects : [...config.projects, dir] })
   agent?.reset()
   win?.setTitle(`${basename(dir)} · Easel`)
   send('project', { dir, name: basename(dir) })
+  send('tabs', tabs())
+}
+
+function closeProject(dir: string): void {
+  const projects = config.projects.filter((p) => p !== dir)
+  if (projects.length === 0) return
+  updateConfig({ projects })
+  if (dir === store.dir) openProject(projects[Math.max(0, config.projects.indexOf(dir) - 1)] ?? projects[0])
+  send('tabs', tabs())
+}
+
+/** A new untitled project in ~/Easel, opened straight away like a new document. */
+function newUntitled(): void {
+  const root = join(homedir(), 'Easel')
+  let n = 1
+  while (existsSync(join(root, n === 1 ? 'Untitled' : `Untitled ${n}`))) n++
+  const dir = join(root, n === 1 ? 'Untitled' : `Untitled ${n}`)
+  mkdirSync(dir, { recursive: true })
+  openProject(dir)
+}
+
+function rememberUrl(url: string): void {
+  if (!/^https?:/.test(url)) return
+  const clean = url.replace(/#.*$/, '')
+  updateConfig({ recentUrls: [clean, ...config.recentUrls.filter((u) => u !== clean)].slice(0, MAX_RECENT) })
+  send('browser:recent', config.recentUrls)
 }
 
 async function chooseProject(create: boolean): Promise<void> {
@@ -66,7 +109,8 @@ function buildMenu(): void {
       {
         label: 'File',
         submenu: [
-          { label: 'New Project…', accelerator: 'CmdOrCtrl+Shift+N', click: () => void chooseProject(true) },
+          { label: 'New Project', accelerator: 'CmdOrCtrl+N', click: () => newUntitled() },
+          { label: 'New Project in Folder…', accelerator: 'CmdOrCtrl+Shift+N', click: () => void chooseProject(true) },
           { label: 'Open Project…', accelerator: 'CmdOrCtrl+O', click: () => void chooseProject(false) },
           { label: 'Show Project in Finder', click: () => shell.openPath(store.dir) },
           { type: 'separator' },
@@ -129,6 +173,8 @@ function registerIpc(): void {
     claudePath: findClaude(),
     models: MODELS,
     browser: browser.state(),
+    recentUrls: config.recentUrls,
+    tabs: tabs(),
     agentStatus: agent.status
   }))
   handle('op', (_e, op: Op) => void store.dispatch(op))
@@ -152,6 +198,9 @@ function registerIpc(): void {
         return browser.reload()
       case 'pick':
         return arg ? browser.startPick() : browser.cancelPick()
+      case 'clearRecent':
+        updateConfig({ recentUrls: [] })
+        return send('browser:recent', [])
       case 'clearPick':
         store.browserPick = null
         return send('browser:pick', null)
@@ -179,7 +228,23 @@ function registerIpc(): void {
     }
   })
   handle('clipboard', (_e, text: string) => clipboard.writeText(text))
-  handle('project', (_e, action: 'new' | 'open' | 'reveal') => (action === 'reveal' ? shell.openPath(store.dir) : chooseProject(action === 'new')))
+  handle('project', (_e, action: 'new' | 'open' | 'reveal' | 'switch' | 'close', dir?: string) => {
+    if (action === 'reveal') return shell.openPath(store.dir)
+    if (action === 'new') return newUntitled()
+    if (action === 'open') return chooseProject(false)
+    if (action === 'switch' && dir && config.projects.includes(dir)) return openProject(dir)
+    if (action === 'close' && dir) return closeProject(dir)
+  })
+  handle('image:add', (_e, { name, bytes, x, y }: { name: string; bytes: Uint8Array; x: number; y: number }) => {
+    const img = nativeImage.createFromBuffer(Buffer.from(bytes))
+    if (img.isEmpty()) throw new Error('Not an image Easel can read.')
+    const id = randomUUID().slice(0, 8) as FrameId
+    const asset = `${id}.png`
+    writeFileSync(store.assetPath(asset), img.toPNG())
+    const { width, height } = img.getSize()
+    store.dispatch({ type: 'add', frame: { id, kind: 'image', asset, name: name.replace(/\.[a-z]+$/i, ''), x: Math.round(x), y: Math.round(y), width, height, updatedAt: Date.now() } })
+    return id
+  })
 }
 
 let toolContext: ToolContext
@@ -215,10 +280,12 @@ function createWindow(): void {
 app.setName('Easel')
 
 app.whenReady().then(async () => {
-  const saved = readConfig().projectDir
+  config = process.env.EASEL_PROJECT_DIR ? { projects: [], recentUrls: [] } : readConfig()
+  const saved = config.projectDir
   const fallback = join(homedir(), 'Easel', 'Untitled')
-  store.open(process.env.EASEL_PROJECT_DIR || (saved && existsSync(saved) ? saved : fallback))
-  if (!process.env.EASEL_PROJECT_DIR) writeConfig({ projectDir: store.dir })
+  const first = process.env.EASEL_PROJECT_DIR || (saved && existsSync(saved) ? saved : fallback)
+  store.open(first)
+  updateConfig({ projectDir: first, projects: [...new Set([...config.projects.filter((p) => existsSync(p)), first])] })
 
   browser = new Browser()
   toolContext = {
@@ -240,6 +307,7 @@ app.whenReady().then(async () => {
 
   store.on('change', (doc) => send('doc', doc))
   browser.on('state', (s) => send('browser:state', s))
+  browser.view.webContents.on('did-navigate', (_e, url) => rememberUrl(url))
   browser.on('pick', (pick) => {
     store.browserPick = pick
     send('browser:pick', pick)

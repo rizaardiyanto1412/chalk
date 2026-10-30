@@ -1,21 +1,34 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, type BrowserState } from './api'
-import { Icon } from './icons'
+import { Icon, type IconName } from './icons'
 
-export function BrowserPane({ state, visible }: { state: BrowserState; visible: boolean }) {
+interface Props {
+  state: BrowserState
+  recent: string[]
+  onClose: () => void
+}
+
+export function BrowserPane({ state, recent, onClose }: Props) {
   const slot = useRef<HTMLDivElement>(null)
+  const url = useRef<HTMLInputElement>(null)
   const [input, setInput] = useState(state.url)
   const [editing, setEditing] = useState(false)
   const [capturing, setCapturing] = useState(false)
+  const [home, setHome] = useState(false)
   const hasPage = !!state.url && !state.url.startsWith('about:')
+  const showPage = hasPage && !home
 
   useEffect(() => {
-    if (!editing) setInput(hasPage ? state.url : '')
-  }, [state.url, editing, hasPage])
+    if (!editing) setInput(showPage ? state.url : '')
+  }, [state.url, editing, showPage])
 
   useEffect(() => {
-    void api.browser('visible', visible && hasPage)
-    if (!visible) return
+    if (state.loading) setHome(false)
+  }, [state.loading])
+
+  useEffect(() => {
+    void api.browser('visible', showPage)
+    if (!showPage) return
     const el = slot.current!
     const report = () => {
       const r = el.getBoundingClientRect()
@@ -30,26 +43,47 @@ export function BrowserPane({ state, visible }: { state: BrowserState; visible: 
       window.removeEventListener('resize', report)
       void api.browser('visible', false)
     }
-  }, [visible, hasPage])
+  }, [showPage])
+
+  const go = (u: string) => {
+    setHome(false)
+    void api.browser('navigate', u)
+  }
+
+  const capture = async () => {
+    setCapturing(true)
+    await api.browser('capture').finally(() => setCapturing(false))
+  }
 
   return (
-    <div className="browser" style={{ display: visible ? 'flex' : 'none' }}>
+    <section className="browser-panel">
       <div className="browser-bar">
-        <button disabled={!state.canGoBack} onClick={() => api.browser('back')} title="Back"><Icon name="left" /></button>
-        <button disabled={!state.canGoForward} onClick={() => api.browser('forward')} title="Forward"><Icon name="right" /></button>
-        <button disabled={!hasPage} onClick={() => api.browser('reload')} title="Reload"><Icon name="reload" size={15} /></button>
+        <button
+          className={state.picking ? 'is-on' : ''}
+          disabled={!showPage}
+          onClick={() => api.browser('pick', !state.picking)}
+          title="Pick an element for the agent (Esc to cancel)"
+          aria-label="Pick element"
+        >
+          <Icon name="pointer" size={15} />
+        </button>
+        <span className="bar-sep" />
+        <button disabled={!state.canGoBack} onClick={() => api.browser('back')} title="Back" aria-label="Back"><Icon name="left" /></button>
+        <button disabled={!state.canGoForward} onClick={() => api.browser('forward')} title="Forward" aria-label="Forward"><Icon name="right" /></button>
+        <button disabled={!showPage} onClick={() => api.browser('reload')} title="Reload" aria-label="Reload"><Icon name="reload" size={15} /></button>
         <form
           className="url"
           onSubmit={(e) => {
             e.preventDefault()
-            if (input.trim()) void api.browser('navigate', input.trim())
-            ;(document.activeElement as HTMLElement).blur()
+            if (input.trim()) go(input.trim())
+            url.current?.blur()
           }}
         >
-          <Icon name="globe" size={14} />
+          <Icon name="globe" size={13} />
           <input
+            ref={url}
             value={input}
-            placeholder="Enter a URL, like localhost:3000 or stripe.com"
+            placeholder="Enter a URL"
             onFocus={(e) => {
               setEditing(true)
               e.target.select()
@@ -59,36 +93,63 @@ export function BrowserPane({ state, visible }: { state: BrowserState; visible: 
             spellCheck={false}
           />
           {state.loading && <span className="spinner" />}
+          {hasPage && (
+            <button type="button" className="url-home" title="Start page" aria-label="Start page" onClick={() => setHome(!home)}>
+              <Icon name="canvas" size={13} />
+            </button>
+          )}
         </form>
-        <button className={`labeled ${state.picking ? 'is-on' : ''}`} disabled={!hasPage} onClick={() => api.browser('pick', !state.picking)} title="Pick an element for the agent to redesign">
-          <Icon name="pointer" size={14} /> {state.picking ? 'Picking… (Esc)' : 'Pick element'}
+        <button className="import-btn" disabled={!showPage || capturing} onClick={capture} title="Put a full-page screenshot on the canvas">
+          {capturing ? 'Capturing…' : 'Capture'}
         </button>
-        <button
-          className="labeled"
-          disabled={!hasPage || capturing}
-          title="Put a full-page screenshot on the canvas"
-          onClick={async () => {
-            setCapturing(true)
-            await api.browser('capture').finally(() => setCapturing(false))
-          }}
-        >
-          <Icon name="camera" size={14} /> {capturing ? 'Capturing…' : 'Capture'}
-        </button>
+        <span className="bar-sep" />
+        <button onClick={onClose} title="Close browser" aria-label="Close browser"><Icon name="panelRight" size={15} /></button>
       </div>
+
       <div ref={slot} className="browser-slot">
-        {!hasPage && (
-          <div className="browser-empty">
-            <Icon name="globe" size={28} />
-            <h3>Built-in browser</h3>
-            <p>Open your app or any site. The agent can navigate it, read its menus, take screenshots, and redesign what you pick.</p>
-            <div className="chips">
-              {['localhost:3000', 'linear.app', 'stripe.com/pricing'].map((u) => (
-                <button key={u} onClick={() => api.browser('navigate', u)}>{u}</button>
-              ))}
+        {!showPage && (
+          <div className="browser-home">
+            <div className="home-mark"><Icon name="globe" size={22} /></div>
+            <h3>Bring the web onto your canvas</h3>
+            <p>Open a live site or your localhost dev server. The agent can browse it, read its menus, and redesign any part.</p>
+            <button className="home-cta" onClick={() => url.current?.focus()}>
+              Enter a URL <Icon name="right" size={14} />
+            </button>
+
+            <div className="home-cards">
+              <HomeCard icon="camera" title="Capture a page" text="Put a full-page screenshot on the canvas, ready to redesign." />
+              <HomeCard icon="pointer" title="Pick an element" text="Point at one part of the page and ask the agent about it." />
+              <HomeCard icon="upload" title="Drop a screenshot" text="Drag a PNG or JPG onto the canvas to use it as a reference." />
             </div>
+
+            {recent.length > 0 && (
+              <div className="recent">
+                <div className="recent-head">
+                  <span><Icon name="file" size={13} /> Recent</span>
+                  <button onClick={() => api.browser('clearRecent')}>Clear all</button>
+                </div>
+                {recent.map((u) => (
+                  <button key={u} className="recent-row" onClick={() => go(u)} title={u}>
+                    <Icon name="globe" size={13} />
+                    <span>{u.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}</span>
+                    <Icon name="arrow" size={13} />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
+    </section>
+  )
+}
+
+function HomeCard({ icon, title, text }: { icon: IconName; title: string; text: string }) {
+  return (
+    <div className="home-card">
+      <div className="home-card-icon"><Icon name={icon} size={15} /></div>
+      <h4>{title}</h4>
+      <p>{text}</p>
     </div>
   )
 }

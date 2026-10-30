@@ -20,7 +20,10 @@ type Draft = Partial<Record<FrameId, Partial<Pick<Frame, 'x' | 'y' | 'width' | '
 export interface CanvasHandle {
   focusFrame: (id: FrameId) => void
   fit: () => void
+  zoomBy: (k: number) => void
 }
+
+export type CanvasTool = 'select' | 'hand'
 
 interface Props {
   doc: Doc
@@ -28,13 +31,14 @@ interface Props {
   selection: FrameId[]
   onSelect: (ids: FrameId[]) => void
   onZoom: (zoom: number) => void
+  tool: CanvasTool
 }
 
 const MIN_ZOOM = 0.05
 const MAX_ZOOM = 4
 const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
 
-export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, port, selection, onSelect, onZoom }, ref) {
+export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, port, selection, onSelect, onZoom, tool }, ref) {
   const host = useRef<HTMLDivElement>(null)
   const [cam, setCam] = useState<Camera>({ x: 80, y: 80, zoom: 0.5 })
   const gesture = useRef<Gesture>({ kind: 'idle' })
@@ -63,8 +67,21 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
 
   const docRef = useRef(doc)
   docRef.current = doc
+  const zoomBy = useCallback((k: number) => {
+    const el = host.current
+    if (!el) return
+    const px = el.clientWidth / 2
+    const py = el.clientHeight / 2
+    setCam((c) => {
+      const zoom = clampZoom(c.zoom * k)
+      const r = zoom / c.zoom
+      return { zoom, x: px - (px - c.x) * r, y: py - (py - c.y) * r }
+    })
+  }, [])
+
   useImperativeHandle(ref, () => ({
     fit,
+    zoomBy,
     focusFrame: (id) => {
       const f = docRef.current.frames.find((fr) => fr.id === id)
       if (f) fitRect({ x: f.x, y: f.y, width: f.width, height: Math.min(f.height, f.width * 1.2) }, 0.9)
@@ -105,16 +122,6 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
       const t = document.activeElement
       return t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || (t as HTMLElement | null)?.isContentEditable
     }
-    const zoomBy = (k: number) => {
-      const el = host.current!
-      const px = el.clientWidth / 2
-      const py = el.clientHeight / 2
-      setCam((c) => {
-        const zoom = clampZoom(c.zoom * k)
-        const r = zoom / c.zoom
-        return { zoom, x: px - (px - c.x) * r, y: py - (py - c.y) * r }
-      })
-    }
     const down = (e: KeyboardEvent) => {
       if (typing()) return
       if (e.code === 'Space') setSpace(true)
@@ -145,7 +152,7 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
       window.removeEventListener('keydown', down)
       window.removeEventListener('keyup', up)
     }
-  }, [selection, onSelect, fit, fitRect, doc.frames])
+  }, [selection, onSelect, fit, fitRect, doc.frames, zoomBy])
 
   const onPointerDown = (e: React.PointerEvent) => {
     const target = e.target as HTMLElement
@@ -153,9 +160,10 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
     const handle = target.closest<HTMLElement>('[data-handle]')
     if (target.closest('[data-toolbar]')) return
     host.current!.setPointerCapture(e.pointerId)
-    if (space || e.button === 1 || !frameEl) {
+    const panTool = space || tool === 'hand'
+    if (panTool || e.button === 1 || !frameEl) {
       gesture.current = { kind: 'pan', sx: e.clientX, sy: e.clientY, cam }
-      if (!space && e.button === 0 && !frameEl) {
+      if (!panTool && e.button === 0 && !frameEl) {
         onSelect([])
         setLive(null)
       }
@@ -202,7 +210,21 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
   return (
     <div
       ref={host}
-      className={`canvas ${space ? 'is-space' : ''} ${panning ? 'is-panning' : ''}`}
+      className={`canvas ${space || tool === 'hand' ? 'is-space' : ''} ${panning ? 'is-panning' : ''}`}
+      onDragOver={(e) => {
+        if ([...e.dataTransfer.items].some((i) => i.type.startsWith('image/'))) e.preventDefault()
+      }}
+      onDrop={async (e) => {
+        e.preventDefault()
+        const rect = host.current!.getBoundingClientRect()
+        let x = (e.clientX - rect.left - cam.x) / cam.zoom
+        const y = (e.clientY - rect.top - cam.y) / cam.zoom
+        for (const file of [...e.dataTransfer.files].filter((f) => f.type.startsWith('image/'))) {
+          const id = (await api.addImage({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()), x, y })) as FrameId
+          onSelect([id])
+          x += 80
+        }
+      }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -210,7 +232,7 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
         const id = (e.target as HTMLElement).closest<HTMLElement>('[data-frame-id]')?.dataset.frameId as FrameId | undefined
         if (id && doc.frames.find((f) => f.id === id)?.kind === 'html') setLive(id)
       }}
-      style={{ '--zoom': cam.zoom, backgroundPosition: `${cam.x}px ${cam.y}px`, backgroundSize: `${24 * cam.zoom}px ${24 * cam.zoom}px` } as React.CSSProperties}
+      style={{ '--zoom': cam.zoom } as React.CSSProperties}
     >
       <div className="world" style={{ transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.zoom})` }}>
         {doc.frames.map((f) => {
@@ -239,17 +261,6 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
         <FrameToolbar frame={selected[0]} cam={cam} live={live === selected[0].id} onLive={(on) => setLive(on ? selected[0].id : null)} onDelete={() => onSelect([])} />
       )}
 
-      {doc.frames.length === 0 && (
-        <div className="empty">
-          <div className="empty-mark"><Icon name="sparkle" size={20} /></div>
-          <h2>Start with a prompt</h2>
-          <p>Describe a screen in the agent panel, or open a site in the Browser tab and ask for a redesign.</p>
-          <div className="empty-hints">
-            <span>“A billing settings page for a SaaS app”</span>
-            <span>“Redesign the pricing section of stripe.com”</span>
-          </div>
-        </div>
-      )}
     </div>
   )
 })

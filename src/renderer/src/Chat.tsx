@@ -38,6 +38,15 @@ interface Props {
   onNewChat: () => void
 }
 
+const SUGGESTIONS = [
+  'Pricing page for a developer tools startup',
+  'Analytics dashboard for a solar energy company',
+  'Mobile onboarding for a language learning app',
+  'Settings page for a team chat app',
+  'Landing page for a specialty coffee subscription',
+  'Recipe detail page for a cooking magazine'
+]
+
 export function Chat({ events, status, models, claudePath, selectedFrames, pick, onClearSelection, onNewChat }: Props) {
   const [text, setText] = useState('')
   const [model, setModel] = useState(() => localStorage.getItem('easel.model') ?? '')
@@ -52,40 +61,37 @@ export function Chat({ events, status, models, claudePath, selectedFrames, pick,
   useEffect(() => {
     const el = box.current!
     el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`
+    el.style.height = `${Math.min(el.scrollHeight, 220)}px`
   }, [text])
 
-  const submit = () => {
-    const t = text.trim()
-    if (!t || running) return
-    void api.sendAgent(t, model)
+  const send = (t: string) => {
+    if (!t.trim() || running) return
+    void api.sendAgent(t.trim(), model)
     setText('')
   }
 
   return (
-    <aside className="chat">
-      <header className="panel-head">
-        <span className="panel-title"><Icon name="sparkle" size={14} /> Agent</span>
-        <div className="panel-actions">
-          <select
-            value={model}
-            onChange={(e) => {
-              setModel(e.target.value)
-              localStorage.setItem('easel.model', e.target.value)
-            }}
-            title="Claude model"
-          >
-            {models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-          </select>
-          <button className="icon-btn" title="New chat" onClick={onNewChat} disabled={running}><Icon name="plus" /></button>
-        </div>
-      </header>
+    <div className="chat">
+      <div className="chat-head">
+        <span className="chat-session">{events.find((e) => e.type === 'user')?.type === 'user' ? (events.find((e) => e.type === 'user') as { text: string }).text.slice(0, 48) : 'New chat'}</span>
+        <button className="chat-new" onClick={onNewChat} disabled={running}><Icon name="plus" size={13} /> New</button>
+      </div>
 
       <div className="messages" ref={list}>
         {events.length === 0 && (
-          <div className="chat-intro">
-            <p>Describe what to design. The agent works on the canvas and can drive the browser.</p>
-            <p className="muted">Runs on your local Claude Code{claudePath ? '' : ' (not found)'}.</p>
+          <div className="agent-empty">
+            <h4>Ask me to design anything</h4>
+            <div className="suggestions">
+              {SUGGESTIONS.map((s) => (
+                <button key={s} onClick={() => send(s)} disabled={running || !claudePath}>{s}</button>
+              ))}
+            </div>
+            <h5>Redesign a live page</h5>
+            <p>Open the browser on the right, go to any page, and ask for a redesign. Use the pointer to pick one part.</p>
+            <h5>Build it in code</h5>
+            <p>Connect Claude Code, select a frame, and ask Claude to build it in React, Svelte, Next.js, or your own stack.</p>
+            <h5>Bring references</h5>
+            <p>Drop a PNG or JPG onto the canvas, select it, and ask the agent to design in that style.</p>
           </div>
         )}
         {events.map((e, i) => <Message key={i} ev={e} />)}
@@ -111,28 +117,41 @@ export function Chat({ events, status, models, claudePath, selectedFrames, pick,
             {selectedFrames.length > 0 && <button className="chip-clear" onClick={onClearSelection}>Clear</button>}
           </div>
         )}
-        <div className="input-row">
+        <div className="input-box">
           <textarea
             ref={box}
-            rows={1}
+            rows={2}
             value={text}
-            placeholder={selectedFrames.length ? 'Ask for a change to the selection…' : pick ? 'What should change in the picked element?' : 'Design a…'}
+            placeholder={selectedFrames.length ? 'Ask for a change to the selection…' : pick ? 'What should change in the picked element?' : 'Design anything…'}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault()
-                submit()
+                send(text)
               }
             }}
           />
-          {running ? (
-            <button className="send is-stop" onClick={() => api.stopAgent()} title="Stop"><Icon name="stop" size={14} /></button>
-          ) : (
-            <button className="send" onClick={submit} disabled={!text.trim()} title="Send (Enter)"><Icon name="send" size={15} /></button>
-          )}
+          <div className="input-foot">
+            <span className="input-hint">{running ? 'Working…' : 'Enter to send'}</span>
+            <select
+              value={model}
+              onChange={(e) => {
+                setModel(e.target.value)
+                localStorage.setItem('easel.model', e.target.value)
+              }}
+              title="Claude model"
+            >
+              {models.map((m) => <option key={m.id} value={m.id}>{m.label === 'Default' ? 'Default model' : m.label}</option>)}
+            </select>
+            {running ? (
+              <button className="send is-stop" onClick={() => api.stopAgent()} title="Stop"><Icon name="stop" size={12} /></button>
+            ) : (
+              <button className="send" onClick={() => send(text)} disabled={!text.trim()} title="Send (Enter)"><Icon name="send" size={14} /></button>
+            )}
+          </div>
         </div>
       </div>
-    </aside>
+    </div>
   )
 }
 
