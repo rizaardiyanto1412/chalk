@@ -1,5 +1,5 @@
 import type { ChalkApi } from '../../preload'
-import type { AgentEvent, AgentStatus, BrowserPick, Doc, FrameId, Op } from '../../shared/model'
+import type { AgentEvent, AgentStatus, BrowserPick, CopyImageResult, Doc, ExportActivity, ExportFormat, ExportResult, FrameId, Op } from '../../shared/model'
 
 declare global {
   interface Window {
@@ -47,11 +47,14 @@ export const api = {
   sendAgent: (text: string, model: string) => e().invoke('agent:send', { text, model }),
   stopAgent: () => e().invoke('agent:stop'),
   resetAgent: () => e().invoke('agent:reset'),
-  frame: (action: 'copy' | 'export' | 'open', id: string) => e().invoke('frame', action, id),
+  frame: (action: 'copy' | 'open', id: string) => e().invoke('frame', action, id),
+  exportFrame: (id: FrameId, format: ExportFormat) => e().invoke('frame:export', id, format) as Promise<ExportResult>,
+  copyFrameImage: (id: FrameId) => e().invoke('frame:copy-image', id) as Promise<CopyImageResult>,
   copy: (text: string) => e().invoke('clipboard', text),
   project: (action: 'new' | 'open' | 'reveal' | 'switch' | 'close', dir?: string) => e().invoke('project', action, dir),
   addImage: (img: { name: string; bytes: Uint8Array; x: number; y: number }) => e().invoke('image:add', img),
   on: {
+    exportActivity: (fn: (activity: ExportActivity) => void) => e().on('export:activity', fn),
     doc: (fn: (d: Doc) => void) => e().on('doc', fn),
     project: (fn: (p: { dir: string; name: string }) => void) => e().on('project', fn),
     browserState: (fn: (s: BrowserState) => void) => e().on('browser:state', fn),

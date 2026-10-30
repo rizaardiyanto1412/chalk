@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { AgentEvent, AgentStatus, BrowserPick, Doc, FrameId } from '../../shared/model'
+import type { AgentEvent, AgentStatus, BrowserPick, Doc, ExportActivity, FrameId } from '../../shared/model'
 import { api, type BrowserState, type InitState, type ProjectTab } from './api'
 import { Canvas, type CanvasHandle, type CanvasTool } from './Canvas'
 import { BrowserPane } from './BrowserPane'
@@ -27,6 +27,7 @@ export function App() {
   const [events, setEvents] = useState<AgentEvent[]>([])
   const [status, setStatus] = useState<AgentStatus>('idle')
   const [zoom, setZoom] = useState(1)
+  const [exportActivity, setExportActivity] = useState<ExportActivity | null>(null)
   const canvas = useRef<CanvasHandle>(null)
 
   const select = useCallback((ids: FrameId[]) => {
@@ -50,6 +51,7 @@ export function App() {
       setStatus(s.agentStatus)
     })
     const offs = [
+      api.on.exportActivity(setExportActivity),
       api.on.doc(setDoc),
       api.on.tabs(setTabs),
       api.on.recentUrls(setRecent),
@@ -212,7 +214,17 @@ export function App() {
           </div>
 
           <main className="stage">
-            <Canvas ref={canvas} doc={doc} port={init.port} selection={selection} onSelect={select} onZoom={setZoom} tool={tool} />
+            <Canvas ref={canvas} doc={doc} port={init.port} selection={selection} onSelect={select} onZoom={setZoom} tool={tool} exportBusy={exportActivity?.status === 'busy'} />
+            {exportActivity && (
+              <div className={`export-notice ${exportActivity.status === 'error' ? 'is-error' : ''}`} role={exportActivity.status === 'error' ? 'alert' : 'status'}>
+                <span>{exportActivity.status === 'busy' || exportActivity.status === 'error'
+                  ? exportActivity.message
+                  : exportActivity.status === 'saved'
+                    ? `Saved ${exportActivity.path}`
+                    : exportActivity.status === 'copied' ? 'PNG copied to clipboard.' : 'Export canceled.'}</span>
+                {exportActivity.status !== 'busy' && <button aria-label="Dismiss export notice" onClick={() => setExportActivity(null)}><Icon name="x" size={12} /></button>}
+              </div>
+            )}
             <div className="zoom-controls">
               <button aria-label="Zoom out" onClick={() => canvas.current?.zoomBy(0.8)}><Icon name="minus" size={14} /></button>
               <button className="zoom-value" title="Zoom to fit" onClick={() => canvas.current?.fit()}>{Math.round(zoom * 100)}%</button>

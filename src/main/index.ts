@@ -3,15 +3,18 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { Server } from 'node:http'
-import { findFrame, type FrameId, type Op } from '../shared/model'
+import { EXPORT_FORMATS, findFrame, type CopyImageResult, type ExportActivity, type ExportResult, type FrameId, type Op } from '../shared/model'
 import { Store } from './store'
 import { Browser } from './browser'
-import { startServer, DEFAULT_PORT, previews } from './server'
+import { startServer, DEFAULT_PORT } from './server'
+import { createPreview } from './previews'
 import { renderUrl } from './render'
 import { randomUUID } from 'node:crypto'
 import type { ToolContext } from './tools'
 import { Agent, findClaude, MODELS } from './agent'
 import { frameDocument } from './frameHtml'
+import { buildExport, copyFrameImage, exportFileName, exportFormatSchema, snapshotExport, writeExport } from './export'
+import { z } from 'zod'
 
 const store = new Store()
 let win: BrowserWindow | null = null
@@ -104,6 +107,63 @@ function history(direction: 'undo' | 'redo'): void {
   send('history', direction)
 }
 
+let uiExportInFlight = false
+const exportActivity = (activity: ExportActivity) => send('export:activity', activity)
+
+function exportSnapshot(id: unknown) {
+  const frame = findFrame(store.doc, z.string().parse(id))
+  if (!frame) throw new Error('Select one frame to export.')
+  return snapshotExport(frame, store.dir, `http://127.0.0.1:${port}`)
+}
+
+async function uiExportAction<T extends ExportResult | CopyImageResult>(message: string, action: () => Promise<T>): Promise<T | { status: 'error'; message: string }> {
+  if (uiExportInFlight) return { status: 'error', message: 'An export is already running.' }
+  uiExportInFlight = true
+  exportActivity({ status: 'busy', message })
+  try {
+    const result = await action()
+    exportActivity(result)
+    return result
+  } catch (err) {
+    const result = { status: 'error', message: err instanceof Error ? err.message : String(err) } as const
+    exportActivity(result)
+    return result
+  } finally {
+    uiExportInFlight = false
+  }
+}
+
+function exportFromUi(id: unknown, rawFormat: unknown): Promise<ExportResult> {
+  return uiExportAction('Preparing export…', async () => {
+    const parsed = exportFormatSchema.safeParse(rawFormat)
+    if (!parsed.success) throw new Error('Choose PNG, JPEG, HTML, or PDF for export.')
+    const format = parsed.data
+    const snapshot = exportSnapshot(id)
+    if (!win) throw new Error('The Chalk window is unavailable.')
+    const ext = format === 'jpeg' ? 'jpg' : format
+    const result = await dialog.showSaveDialog(win, {
+      title: `Export ${format.toUpperCase()}`,
+      defaultPath: join(app.getPath('downloads'), exportFileName(snapshot.frame, ext)),
+      filters: [{ name: format.toUpperCase(), extensions: [ext] }]
+    })
+    if (result.canceled || !result.filePath) return { status: 'canceled' }
+    exportActivity({ status: 'busy', message: `Exporting ${format.toUpperCase()}…` })
+    const file = await buildExport(snapshot, format)
+    writeExport(result.filePath, file.bytes)
+    return { status: 'saved', path: result.filePath, format, bytes: file.bytes.length, width: file.width, height: file.height }
+  })
+}
+
+function copyImageFromUi(id: unknown): Promise<CopyImageResult> {
+  return uiExportAction('Copying PNG…', () => copyFrameImage(exportSnapshot(id)))
+}
+
+function exportSelection(format: unknown): void {
+  if (uiExportInFlight) return
+  if (store.selection.length !== 1) return exportActivity({ status: 'error', message: 'Select one frame to export.' })
+  void exportFromUi(store.selection[0], format)
+}
+
 function buildMenu(): void {
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
@@ -115,6 +175,7 @@ function buildMenu(): void {
           { label: 'New Project in Folder…', accelerator: 'CmdOrCtrl+Shift+N', click: () => void chooseProject(true) },
           { label: 'Open Project…', accelerator: 'CmdOrCtrl+O', click: () => void chooseProject(false) },
           { label: 'Show Project in Finder', click: () => shell.openPath(store.dir) },
+          { label: 'Export Selection', submenu: EXPORT_FORMATS.map((format) => ({ label: format.toUpperCase(), click: () => exportSelection(format) })) },
           { type: 'separator' },
           { role: 'close' }
         ]
@@ -218,17 +279,16 @@ function registerIpc(): void {
   })
   handle('agent:stop', () => agent.stop())
   handle('agent:reset', () => agent.reset())
-  handle('frame', async (_e, action: string, id: string) => {
-    const f = findFrame(store.doc, id)
+  handle('frame', async (_e, rawAction: unknown, rawId: unknown) => {
+    const action = z.enum(['copy', 'open']).parse(rawAction)
+    const f = findFrame(store.doc, z.string().parse(rawId))
     if (!f) return
     const html = f.kind === 'html' ? frameDocument(f) : ''
     if (action === 'copy') clipboard.writeText(html)
     if (action === 'open') void shell.openExternal(`http://127.0.0.1:${port}/frame/${f.id}`)
-    if (action === 'export' && win) {
-      const res = await dialog.showSaveDialog(win, { defaultPath: join(homedir(), 'Downloads', `${f.name.replace(/[^\w -]+/g, '').trim() || 'frame'}.html`) })
-      if (!res.canceled && res.filePath) writeFileSync(res.filePath, html)
-    }
   })
+  handle('frame:export', (_e, id: unknown, format: unknown) => exportFromUi(id, format))
+  handle('frame:copy-image', (_e, id: unknown) => copyImageFromUi(id))
   handle('clipboard', (_e, text: string) => clipboard.writeText(text))
   handle('project', (_e, action: 'new' | 'open' | 'reveal' | 'switch' | 'close', dir?: string) => {
     if (action === 'reveal') return shell.openPath(store.dir)
@@ -293,14 +353,14 @@ app.whenReady().then(async () => {
   toolContext = {
     store,
     browser,
+    origin: () => `http://127.0.0.1:${port}`,
     frameUrl: (f) => `http://127.0.0.1:${port}/frame/${f.id}?v=${f.updatedAt}`,
     measure: async (html, width) => {
-      const token = randomUUID()
-      previews.set(token, html)
+      const preview = createPreview(html, `http://127.0.0.1:${port}`)
       try {
-        return (await renderUrl(`http://127.0.0.1:${port}/preview/${token}`, width)).contentHeight
+        return (await renderUrl(preview.url, width)).contentHeight
       } finally {
-        previews.delete(token)
+        preview.dispose()
       }
     },
     focus: (target) => send('focus', target)

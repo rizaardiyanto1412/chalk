@@ -9,6 +9,7 @@ import { renderUrl } from './render'
 import { frameDocument } from './frameHtml'
 import { DESIGN_GUIDE } from './prompt'
 import { getStyle, projectDesignNotes, SCREEN_GUIDES, screenTypeSchema } from './design'
+import { buildExport, copyFrameImage, exportFormatSchema, snapshotExport, writeProjectExport } from './export'
 
 export type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
 
@@ -16,6 +17,7 @@ export interface ToolContext {
   store: Store
   browser: Browser
   frameUrl: (frame: Frame) => string
+  origin: () => string
   /** Render HTML that is not on the canvas yet and return its content height. */
   measure: (html: string, width: number) => Promise<number>
   /** Tell the UI what the agent is touching so the user can watch it. */
@@ -85,6 +87,23 @@ function applyEdits(source: string, edits: { find: string; replace: string }[]):
 const newId = () => randomUUID().slice(0, 8) as FrameId
 
 export const TOOLS: Tool[] = [
+  tool({
+    name: 'export_frame',
+    description: 'Export one frame as PNG, JPEG, portable HTML, or a single-page PDF into the captured project exports folder. Returns its generated path, dimensions, and byte count. No output path or filename can be chosen. Local project assets are embedded; remote fonts and CDNs remain remote. Does not modify the canvas.',
+    input: { id: z.string(), format: exportFormatSchema },
+    run: async ({ id, format }, ctx) => {
+      const snapshot = snapshotExport(requireFrame(ctx, id), ctx.store.dir, ctx.origin())
+      const file = await buildExport(snapshot, format)
+      const path = writeProjectExport(snapshot, file)
+      return [text({ path, projectDir: snapshot.projectDir, format, bytes: file.bytes.length, width: file.width, height: file.height, updatedAt: snapshot.frame.updatedAt })]
+    }
+  }),
+  tool({
+    name: 'copy_frame_image',
+    description: 'Render one frame at its canvas dimensions and copy its PNG image to the system clipboard. Does not change the canvas or write a file.',
+    input: { id: z.string() },
+    run: async ({ id }, ctx) => [text(await copyFrameImage(snapshotExport(requireFrame(ctx, id), ctx.store.dir, ctx.origin())))]
+  }),
   tool({
     name: 'get_canvas',
     description: 'List every frame on the Chalk canvas (id, name, kind, position, size), plus what the user has selected: selected frame ids and the element they picked in the built-in browser.',

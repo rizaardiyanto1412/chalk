@@ -7,11 +7,10 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { findFrame } from '../shared/model'
 import { TOOLS, type ToolContext } from './tools'
 import { frameDocument } from './frameHtml'
+import { previews } from './previews'
 
 export const DEFAULT_PORT = 7801
 
-/** HTML waiting to be measured before it lands on the canvas, keyed by a one-time token. */
-export const previews = new Map<string, string>()
 const TAILWIND_JS = readFileSync(createRequire(import.meta.url).resolve('@tailwindcss/browser'), 'utf8')
 
 function buildMcp(ctx: ToolContext): McpServer {
@@ -69,9 +68,9 @@ export function startServer(ctx: ToolContext, port: number): Promise<Server> {
     }
     const previewMatch = url.pathname.match(/^\/preview\/([\w-]+)$/)
     if (previewMatch) {
-      const html = previews.get(previewMatch[1])
-      if (html === undefined) return send(res, 404, 'text/plain', 'no such preview')
-      return send(res, 200, 'text/html; charset=utf-8', frameDocument({ name: 'Preview', html }, '/vendor/tailwind.js'))
+      const preview = previews.get(previewMatch[1])
+      if (preview === undefined) return send(res, 404, 'text/plain', 'no such preview')
+      return send(res, 200, 'text/html; charset=utf-8', preview.kind === 'document' ? preview.html : frameDocument({ name: 'Preview', html: preview.html }, '/vendor/tailwind.js'))
     }
     if (url.pathname === '/vendor/tailwind.js') return send(res, 200, 'text/javascript', TAILWIND_JS)
     const frameMatch = url.pathname.match(/^\/frame\/([\w-]+)$/)

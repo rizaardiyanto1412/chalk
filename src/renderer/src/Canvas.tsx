@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import type { Doc, Frame, FrameId } from '../../shared/model'
+import { EXPORT_FORMATS, type Doc, type Frame, type FrameId } from '../../shared/model'
 import { api } from './api'
 import { Icon } from './icons'
 
@@ -32,13 +32,14 @@ interface Props {
   onSelect: (ids: FrameId[]) => void
   onZoom: (zoom: number) => void
   tool: CanvasTool
+  exportBusy: boolean
 }
 
 const MIN_ZOOM = 0.05
 const MAX_ZOOM = 4
 const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
 
-export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, port, selection, onSelect, onZoom, tool }, ref) {
+export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, port, selection, onSelect, onZoom, tool, exportBusy }, ref) {
   const host = useRef<HTMLDivElement>(null)
   const [cam, setCam] = useState<Camera>({ x: 80, y: 80, zoom: 0.5 })
   const gesture = useRef<Gesture>({ kind: 'idle' })
@@ -258,15 +259,27 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
       </div>
 
       {selected.length === 1 && !draft[selected[0].id] && (
-        <FrameToolbar frame={selected[0]} cam={cam} live={live === selected[0].id} onLive={(on) => setLive(on ? selected[0].id : null)} onDelete={() => onSelect([])} />
+        <FrameToolbar key={selected[0].id} frame={selected[0]} cam={cam} live={live === selected[0].id} busy={exportBusy} onLive={(on) => setLive(on ? selected[0].id : null)} onDelete={() => onSelect([])} />
       )}
 
     </div>
   )
 })
 
-function FrameToolbar({ frame, cam, live, onLive, onDelete }: { frame: Frame; cam: Camera; live: boolean; onLive: (on: boolean) => void; onDelete: () => void }) {
+function FrameToolbar({ frame, cam, live, busy, onLive, onDelete }: { frame: Frame; cam: Camera; live: boolean; busy: boolean; onLive: (on: boolean) => void; onDelete: () => void }) {
   const [copied, setCopied] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
+  const exportButton = useRef<HTMLButtonElement>(null)
+  const exportPanel = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!exportOpen) return
+    exportPanel.current?.querySelector('button')?.focus()
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !exportPanel.current?.contains(event.target) && !exportButton.current?.contains(event.target)) setExportOpen(false)
+    }
+    document.addEventListener('pointerdown', outside)
+    return () => document.removeEventListener('pointerdown', outside)
+  }, [exportOpen])
   const left = cam.x + (frame.x + frame.width) * cam.zoom
   const top = cam.y + frame.y * cam.zoom - 40
   return (
@@ -286,14 +299,30 @@ function FrameToolbar({ frame, cam, live, onLive, onDelete }: { frame: Frame; ca
           >
             <Icon name={copied ? 'check' : 'copy'} size={14} />
           </button>
-          <button title="Export HTML file" onClick={() => api.frame('export', frame.id)}>
-            <Icon name="download" size={14} />
-          </button>
           <button title="Open in your browser" onClick={() => api.frame('open', frame.id)}>
             <Icon name="external" size={14} />
           </button>
           <span className="sep" />
         </>
+      )}
+      <button title="Copy as PNG" aria-label="Copy as PNG" disabled={busy} onClick={() => void api.copyFrameImage(frame.id)}><Icon name="image" size={14} /></button>
+      <button ref={exportButton} title="Export frame" aria-label="Export frame" aria-haspopup="dialog" aria-expanded={exportOpen} disabled={busy} onClick={() => setExportOpen(!exportOpen)}><Icon name="download" size={14} /></button>
+      {exportOpen && (
+        <div ref={exportPanel} className="export-popover" role="dialog" aria-label="Export frame formats" onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setExportOpen(false)
+        }} onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.stopPropagation()
+            setExportOpen(false)
+            exportButton.current?.focus()
+          }
+        }}>
+          {EXPORT_FORMATS.map((format) => <button key={format} aria-label={`Export ${format.toUpperCase()}`} disabled={busy} onClick={() => {
+            setExportOpen(false)
+            exportButton.current?.focus()
+            void api.exportFrame(frame.id, format)
+          }}>{format.toUpperCase()}</button>)}
+        </div>
       )}
       <button
         title="Delete"

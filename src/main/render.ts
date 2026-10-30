@@ -1,5 +1,6 @@
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, session } from 'electron'
 import { z } from 'zod'
+import { previews } from './previews'
 
 const SETTLE_JS = `Promise.race([
   Promise.all([document.fonts.ready, customElements.whenDefined('iconify-icon').catch(() => {})]),
@@ -7,6 +8,22 @@ const SETTLE_JS = `Promise.race([
 ]).then(() => new Promise((r) => setTimeout(r, 350)))`
 
 const MAX_HEIGHT = 12000
+let exportSession: Electron.Session | undefined
+
+function privateExportSession(origin: string): Electron.Session {
+  if (exportSession) return exportSession
+  exportSession = session.fromPartition('chalk-frame-exports')
+  exportSession.webRequest.onBeforeRequest((details, callback) => {
+    const request = new URL(details.url)
+    const host = request.hostname.toLowerCase().replace(/\.$/, '')
+    const local = host === 'localhost' || host.endsWith('.localhost') || /^127\./.test(host) || host === '0.0.0.0' || host === '[::]' || host === '[::1]' || host.startsWith('[::ffff:')
+    const serverPort = request.port === new URL(origin).port
+    const token = request.pathname.match(/^\/preview\/([\w-]+)$/)?.[1]
+    const allowedLocal = request.origin === origin && (request.pathname === '/vendor/tailwind.js' || (token !== undefined && previews.get(token)?.kind === 'document'))
+    callback({ cancel: request.protocol === 'file:' || ((local || serverPort) && !allowedLocal) })
+  })
+  return exportSession
+}
 
 export interface RenderResult {
   png: Buffer
@@ -52,12 +69,41 @@ const DIAGNOSTICS_JS = `(() => {
 export function renderUrl(url: string, width: number, height: number, review: true): Promise<ReviewedRenderResult>
 export function renderUrl(url: string, width: number, height?: number): Promise<RenderResult>
 export async function renderUrl(url: string, width: number, height?: number, review = false): Promise<RenderResult | ReviewedRenderResult> {
+  return withSettledPage(url, width, height, async (win, target, contentHeight) => {
+    const diagnostics = review ? diagnosticsSchema.parse(await win.webContents.executeJavaScript(DIAGNOSTICS_JS)) : null
+    win.webContents.invalidate()
+    const image = await win.webContents.capturePage({ x: 0, y: 0, width, height: target })
+    return diagnostics ? { png: image.toPNG(), contentHeight, diagnostics } : { png: image.toPNG(), contentHeight }
+  })
+}
+
+export async function renderExport(url: string, width: number, height: number, format: 'png' | 'jpeg' | 'pdf'): Promise<Buffer> {
+  return withSettledPage(url, width, height, async (win) => {
+    if (format === 'pdf') {
+      await win.webContents.insertCSS(`@page{margin:0!important}html,body{width:${width}px!important;height:${height}px!important;max-height:${height}px!important;overflow:hidden!important}`)
+      return win.webContents.printToPDF({
+        pageSize: { width: width / 96, height: height / 96 },
+        margins: { top: 0, bottom: 0, left: 0, right: 0 },
+        printBackground: true,
+        preferCSSPageSize: false,
+        pageRanges: '1'
+      })
+    }
+    win.webContents.invalidate()
+    const image = await win.webContents.capturePage({ x: 0, y: 0, width, height })
+    return format === 'jpeg' ? image.toJPEG(90) : image.toPNG()
+  }, true)
+}
+
+async function withSettledPage<T>(url: string, width: number, height: number | undefined, use: (win: BrowserWindow, target: number, contentHeight: number) => Promise<T>, privateExport = false): Promise<T> {
+  const privateSession = privateExport ? privateExportSession(new URL(url).origin) : undefined
   const win = new BrowserWindow({
     show: false,
     width,
     height: height ?? 900,
     useContentSize: true,
-    webPreferences: { offscreen: true, backgroundThrottling: false, sandbox: true }
+    ...(privateExport ? { backgroundColor: '#ffffff' } : {}),
+    webPreferences: { offscreen: true, backgroundThrottling: false, sandbox: true, ...(privateSession ? { session: privateSession } : {}) }
   })
   // Frame HTML is untrusted: it must not take the render window anywhere else.
   win.webContents.on('will-navigate', (e) => e.preventDefault())
@@ -88,10 +134,7 @@ export async function renderUrl(url: string, width: number, height?: number, rev
       win.setContentSize(width, target)
       await win.webContents.executeJavaScript('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
     }
-    const diagnostics = review ? diagnosticsSchema.parse(await win.webContents.executeJavaScript(DIAGNOSTICS_JS)) : null
-    win.webContents.invalidate()
-    const image = await win.webContents.capturePage({ x: 0, y: 0, width, height: target })
-    return diagnostics ? { png: image.toPNG(), contentHeight, diagnostics } : { png: image.toPNG(), contentHeight }
+    return await use(win, target, contentHeight)
   } finally {
     win.destroy()
   }

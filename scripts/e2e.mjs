@@ -2,18 +2,19 @@ import { _electron as electron } from 'playwright-core'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { createServer } from 'node:http'
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, symlinkSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, symlinkSync, realpathSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { PNG } from 'pngjs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
+import { checkExports } from './export-e2e.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const artifacts = join(root, 'e2e-artifacts')
+const artifacts = process.env.CHALK_E2E_ARTIFACTS || join(root, 'e2e-artifacts')
 mkdirSync(artifacts, { recursive: true })
-const project = mkdtempSync(join(tmpdir(), 'chalk-e2e-'))
+const project = realpathSync(mkdtempSync(join(tmpdir(), 'chalk-e2e-')))
 const PORT = 7911
 const results = []
 const check = async (name, fn) => {
@@ -24,7 +25,7 @@ const check = async (name, fn) => {
     console.log(`PASS  ${name}`)
   } catch (err) {
     results.push(['FAIL', name, Date.now() - t])
-    console.log(`FAIL  ${name}\n      ${err.stack?.split('\n').slice(0, 3).join('\n      ')}`)
+    console.log(`FAIL  ${name}\n      ${err.stack?.split('\n').join('\n      ')}`)
   }
 }
 
@@ -79,7 +80,7 @@ await check('UI boots with the agent panel, tool strip, project tab, and browser
 await check('MCP lists the shared canvas, design, and browser tools', async () => {
   const { tools } = await client.listTools()
   assert.deepEqual(tools.map((t) => t.name).sort(), [
-    'get_canvas', 'get_frame', 'screenshot_frame', 'review_frame', 'create_frame', 'update_frame', 'edit_frame', 'delete_frame',
+    'get_canvas', 'get_frame', 'screenshot_frame', 'review_frame', 'export_frame', 'copy_frame_image', 'create_frame', 'update_frame', 'edit_frame', 'delete_frame',
     'get_style', 'get_design_guidelines', 'browser_state', 'browser_navigate', 'browser_snapshot', 'browser_click',
     'browser_type', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_capture_to_canvas', 'browser_extract_styles'
   ].sort())
@@ -250,6 +251,8 @@ await check('get_canvas reports frames and the UI selection', async () => {
   assert.deepEqual(c.selectedFrameIds, [frameId])
   await win.screenshot({ path: join(artifacts, '03-canvas-selected.png') })
 })
+
+await checkExports({ app, win, client, call, json, check, project, artifacts, framesTab })
 
 await check('browser_navigate loads a page and opens the browser panel', async () => {
   await win.locator('[aria-label="Close browser"]').click()

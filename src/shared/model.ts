@@ -24,6 +24,20 @@ export interface ImageFrame extends FrameBase {
 
 export type Frame = HtmlFrame | ImageFrame
 
+export const EXPORT_FORMATS = ['png', 'jpeg', 'html', 'pdf'] as const
+export type ExportFormat = (typeof EXPORT_FORMATS)[number]
+
+export type ExportResult =
+  | { status: 'saved'; path: string; format: ExportFormat; bytes: number; width: number; height: number }
+  | { status: 'canceled' }
+  | { status: 'error'; message: string }
+
+export type CopyImageResult =
+  | { status: 'copied'; width: number; height: number }
+  | { status: 'error'; message: string }
+
+export type ExportActivity = { status: 'busy'; message: string } | ExportResult | CopyImageResult
+
 export interface Doc {
   version: 1
   frames: Frame[]
