@@ -1,0 +1,10 @@
+app: /Applications/Easel.app at commit bc526eac
+health: {"ok":true,"project":"/Users/rizaardiyanto/Documents/easel/runs/proof-project","frames":1}
+command: claude -p ... --mcp-config easel http://127.0.0.1:7961/mcp --strict-mcp-config
+- **Frame name:** Relay — Settings (id `0ff0ac97`)
+- **Accent color class:** `teal-600`. The frame uses it as `bg-teal-600`, `text-teal-600` and `border-teal-600`.
+- **Classes on the primary "Save changes" button** (in the header):
+  `h-9 px-4 rounded-lg bg-teal-600 text-sm font-medium text-white shadow-sm`
+
+The frame has only one "Save changes" button. I used only the easel MCP and did not write any files.
+exit: 0
