@@ -8,6 +8,7 @@ import type { Browser } from './browser'
 import { renderUrl } from './render'
 import { frameDocument } from './frameHtml'
 import { DESIGN_GUIDE } from './prompt'
+import { getStyle, projectDesignNotes, SCREEN_GUIDES, screenTypeSchema } from './design'
 
 export type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
 
@@ -122,6 +123,19 @@ export const TOOLS: Tool[] = [
     }
   }),
   tool({
+    name: 'review_frame',
+    description: 'Return a frame image and measured layout diagnostics from the same render: horizontal overflow, content below the frame, failed images, and pending images. Inspect the image for visual quality as well; these checks do not judge taste, contrast, or internal clipping.',
+    input: { id: z.string() },
+    readOnly: true,
+    run: async ({ id }, ctx) => {
+      const f = requireFrame(ctx, id)
+      ctx.focus({ mode: 'canvas', frameId: f.id })
+      if (f.kind === 'image') return [image(readFileSync(ctx.store.assetPath(f.asset))), text({ kind: 'image', note: 'Reference image only. HTML layout diagnostics are unavailable.' })]
+      const { png, diagnostics } = await renderUrl(ctx.frameUrl(f), f.width, f.height, true)
+      return [image(png), text({ kind: 'html', ...diagnostics, limits: 'Document-level layout checks and loaded <img> elements only. Pending images are unresolved. Internal clipped containers, background images, icon loading, contrast, and design quality require visual inspection.' })]
+    }
+  }),
+  tool({
     name: 'create_frame',
     description: 'Create a new design frame from an HTML fragment (Tailwind v4 classes, content of <body> only). Width defaults to 1440 (use 390 for mobile). Height fits the content unless you give one. Position defaults to the right of existing frames; pass near_frame_id to place it right of a specific frame.',
     input: {
@@ -144,7 +158,7 @@ export const TOOLS: Tool[] = [
         frame: { id, kind: 'html', name: a.name, html: a.html, width, height, x: a.x ?? slot.x, y: a.y ?? slot.y, updatedAt: Date.now() }
       })
       ctx.focus({ mode: 'canvas', frameId: id })
-      return [text({ created: frameSummary(requireFrame(ctx, id)), next: 'Call screenshot_frame to review it.' })]
+      return [text({ created: frameSummary(requireFrame(ctx, id)), next: 'Call review_frame and inspect the image before continuing.' })]
     }
   }),
   tool({
@@ -196,11 +210,18 @@ export const TOOLS: Tool[] = [
     }
   }),
   tool({
-    name: 'get_design_guidelines',
-    description: 'The Chalk design guide: layout, type, color, and component rules every Chalk design follows. Read it before you implement or extend an Chalk design so the result matches.',
-    input: {},
+    name: 'get_style',
+    description: 'List original Chalk visual styles, or load one by name/id for its composition, typography, semantic color tokens, Tailwind v4 theme, font links, spacing, imagery, and avoid list. Use when a new design has no user-provided visual direction. Preserve existing brand and selected references before choosing a preset.',
+    input: { name: z.string().optional() },
     readOnly: true,
-    run: async () => [text(DESIGN_GUIDE)]
+    run: async ({ name }) => [text(getStyle(name))]
+  }),
+  tool({
+    name: 'get_design_guidelines',
+    description: 'Read Chalk base guidance, a screen-specific guide, and the current project DESIGN.md if present. Read before a new design task. Project notes and user references guide visual choices ahead of generic presets. Reloads DESIGN.md on every call.',
+    input: { screen_type: screenTypeSchema.optional() },
+    readOnly: true,
+    run: async ({ screen_type = 'general' }, ctx) => [text(`${DESIGN_GUIDE}\n\n## Screen guide: ${screen_type}\n\n${SCREEN_GUIDES[screen_type]}\n\n${projectDesignNotes(ctx.store.dir)}`)]
   }),
   tool({
     name: 'browser_state',

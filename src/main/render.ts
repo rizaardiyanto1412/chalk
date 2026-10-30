@@ -1,4 +1,5 @@
 import { BrowserWindow } from 'electron'
+import { z } from 'zod'
 
 const SETTLE_JS = `Promise.race([
   Promise.all([document.fonts.ready, customElements.whenDefined('iconify-icon').catch(() => {})]),
@@ -12,11 +13,45 @@ export interface RenderResult {
   contentHeight: number
 }
 
+interface ReviewedRenderResult extends RenderResult {
+  diagnostics: RenderDiagnostics
+}
+
+const diagnosticsSchema = z.object({
+  viewport: z.object({ width: z.number(), height: z.number() }),
+  content: z.object({ width: z.number(), height: z.number() }),
+  horizontalOverflowPx: z.number(),
+  clippedBelowFramePx: z.number(),
+  failedImages: z.array(z.object({ source: z.string(), alt: z.string() })),
+  pendingImages: z.number()
+})
+
+export type RenderDiagnostics = z.infer<typeof diagnosticsSchema>
+
+const DIAGNOSTICS_JS = `(() => {
+  const root = document.documentElement;
+  const body = document.body;
+  const width = Math.max(root.scrollWidth, body?.scrollWidth ?? 0);
+  const height = Math.max(root.scrollHeight, body?.scrollHeight ?? 0);
+  const images = [...document.images].filter((image) => image.currentSrc || image.getAttribute('src'));
+  return {
+    viewport: { width: innerWidth, height: innerHeight },
+    content: { width, height },
+    horizontalOverflowPx: Math.max(0, width - innerWidth),
+    clippedBelowFramePx: Math.max(0, height - innerHeight),
+    failedImages: images.filter((image) => image.complete && image.naturalWidth === 0)
+      .slice(0, 20).map((image) => ({ source: (image.currentSrc || image.src).slice(0, 300), alt: image.alt })),
+    pendingImages: images.filter((image) => !image.complete).length
+  };
+})()`
+
 /**
  * Load a frame URL in a fresh offscreen window and capture it. A new window per render keeps
  * concurrent renders from sharing size or load state.
  */
-export async function renderUrl(url: string, width: number, height?: number): Promise<RenderResult> {
+export function renderUrl(url: string, width: number, height: number, review: true): Promise<ReviewedRenderResult>
+export function renderUrl(url: string, width: number, height?: number): Promise<RenderResult>
+export async function renderUrl(url: string, width: number, height?: number, review = false): Promise<RenderResult | ReviewedRenderResult> {
   const win = new BrowserWindow({
     show: false,
     width,
@@ -34,16 +69,29 @@ export async function renderUrl(url: string, width: number, height?: number): Pr
     })
     if (win.webContents.isLoading()) await new Promise<void>((r) => win.webContents.once('did-stop-loading', () => r()))
     await win.webContents.executeJavaScript(SETTLE_JS)
-    const contentHeight = Math.min(
+    let contentHeight = Math.min(
       MAX_HEIGHT,
       Math.ceil(await win.webContents.executeJavaScript('document.documentElement.scrollHeight'))
     )
-    const target = height ?? contentHeight
+    let target = height ?? contentHeight
     win.setContentSize(width, target)
-    await new Promise((r) => setTimeout(r, 120))
+    await win.webContents.executeJavaScript(`Promise.race([
+      Promise.all([...document.images].filter((image) => !image.complete).map((image) => new Promise((resolve) => {
+        image.addEventListener('load', resolve, { once: true });
+        image.addEventListener('error', resolve, { once: true });
+      }))),
+      new Promise((resolve) => setTimeout(resolve, 1500))
+    ]).then(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))`)
+    contentHeight = Math.min(MAX_HEIGHT, Math.ceil(await win.webContents.executeJavaScript('document.documentElement.scrollHeight')))
+    if (height === undefined && contentHeight !== target) {
+      target = contentHeight
+      win.setContentSize(width, target)
+      await win.webContents.executeJavaScript('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+    }
+    const diagnostics = review ? diagnosticsSchema.parse(await win.webContents.executeJavaScript(DIAGNOSTICS_JS)) : null
     win.webContents.invalidate()
     const image = await win.webContents.capturePage({ x: 0, y: 0, width, height: target })
-    return { png: image.toPNG(), contentHeight }
+    return diagnostics ? { png: image.toPNG(), contentHeight, diagnostics } : { png: image.toPNG(), contentHeight }
   } finally {
     win.destroy()
   }

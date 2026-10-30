@@ -29,6 +29,8 @@ export interface TurnContext {
 export function contextBlock(c: TurnContext): string {
   const lines: string[] = []
   if (c.selectedFrames.length) lines.push(`Selected frames: ${c.selectedFrames.map((f) => `"${f.name}" (id ${f.id}, ${f.kind})`).join(', ')}`)
+  const references = c.selectedFrames.filter((f) => f.kind === 'image')
+  if (references.length) lines.push(`Selected image references: ${references.map((f) => f.id).join(', ')}. View each with screenshot_frame before designing.`)
   if (c.browserUrl && !c.browserUrl.startsWith('about:')) lines.push(`Built-in browser is on: ${c.browserUrl}`)
   if (c.browserPick) {
     const p = c.browserPick

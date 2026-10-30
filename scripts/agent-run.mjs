@@ -48,6 +48,7 @@ for (const [i, prompt] of prompts.entries()) {
 }
 
 const transcript = await win.locator('.messages').innerText()
+const agentErrors = await win.locator('.msg-error').allTextContents()
 writeFileSync(join(out, 'transcript.txt'), transcript)
 
 const rpc = async (name, args = {}) => {
@@ -64,6 +65,7 @@ for (const f of canvas.frames) {
   const ext = img.mimeType === 'image/jpeg' ? 'jpg' : 'png'
   writeFileSync(join(out, `frame-${f.name.replace(/[^\w-]+/g, '_')}.${ext}`), Buffer.from(img.data, 'base64'))
 }
-console.log(JSON.stringify({ project, seconds: Math.round((Date.now() - started) / 1000), frames: canvas.frames.map((f) => `${f.name} ${f.width}x${f.height}`) }, null, 2))
+console.log(JSON.stringify({ project, seconds: Math.round((Date.now() - started) / 1000), frames: canvas.frames.map((f) => `${f.name} ${f.width}x${f.height}`), agentErrors }, null, 2))
 console.log(transcript.slice(-1500))
 await app.close()
+if (agentErrors.length) process.exitCode = 1

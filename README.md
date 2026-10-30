@@ -8,6 +8,9 @@ Chalk is an open-source Mac design app. You describe a screen, and an agent desi
 - **Agent.** The right panel sends your prompt to Claude Code. The agent creates frames, takes a screenshot of each one, and refines what it sees. Select frames first to ask for changes to them.
 - **Built-in browser.** The Browser tab opens any site, including `localhost`. The agent can navigate, read menus, click, type, take screenshots, and measure a page's fonts and colors. Use **Pick element** to show the agent which part to redesign. Use **Capture** to put a full-page screenshot on the canvas.
 - **MCP server for Claude Code.** While Chalk is open, Claude Code in any project can read your frames and build them in code.
+- **Design direction.** Six original style presets provide typography, palettes, composition, and Tailwind theme tokens. Screen-specific guides and a project's `DESIGN.md` keep the agent's choices consistent. `review_frame` returns a screenshot with layout and image-loading findings.
+
+See [Guide Chalk's design taste](docs/design-taste.md) for references, presets, and project rules. [Pen research](docs/pen-research.md) records the observed workflow that informed this change.
 
 ## Install
 
@@ -37,11 +40,11 @@ A project is a folder. `chalk.json` holds the frames, and `assets/` holds browse
 ```sh
 npm run dev          # run with hot reload
 npm run typecheck
-npm run build && npm run e2e             # 21 end-to-end checks against the real app
+npm run build && npm run e2e             # end-to-end checks against the real app
 node scripts/agent-run.mjs runs/x "prompt"   # drive a real agent run and save renders
 ```
 
-`src/main/tools.ts` holds the one tool registry. The MCP server and the in-app agent both use it. `src/main/prompt.ts` holds the design guide and the agent instructions.
+`src/main/tools.ts` holds the one tool registry. The MCP server and the in-app agent both use it. `src/main/prompt.ts` holds the base design guide and agent instructions. `src/main/design.ts` owns the style presets, screen guides, and project design notes.
 
 ## Security
 

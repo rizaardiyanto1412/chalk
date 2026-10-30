@@ -2,7 +2,9 @@ import { _electron as electron } from 'playwright-core'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { createServer } from 'node:http'
-import { mkdtempSync, mkdirSync, readFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, symlinkSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { PNG } from 'pngjs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -74,9 +76,135 @@ await check('UI boots with the agent panel, tool strip, project tab, and browser
   await win.screenshot({ path: join(artifacts, '01-empty.png') })
 })
 
-await check('MCP lists all 18 tools', async () => {
+await check('MCP lists the shared canvas, design, and browser tools', async () => {
   const { tools } = await client.listTools()
-  assert.equal(tools.length, 18, tools.map((t) => t.name).join(','))
+  assert.deepEqual(tools.map((t) => t.name).sort(), [
+    'get_canvas', 'get_frame', 'screenshot_frame', 'review_frame', 'create_frame', 'update_frame', 'edit_frame', 'delete_frame',
+    'get_style', 'get_design_guidelines', 'browser_state', 'browser_navigate', 'browser_snapshot', 'browser_click',
+    'browser_type', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_capture_to_canvas', 'browser_extract_styles'
+  ].sort())
+  assert.equal(tools.find((t) => t.name === 'get_style').annotations.readOnlyHint, true)
+  assert.equal(tools.find((t) => t.name === 'review_frame').annotations.readOnlyHint, true)
+})
+
+await check('get_style lists distinct styles and loads fonts and semantic themes by id or name', async () => {
+  const { styles } = json(await call(client, 'get_style'))
+  assert.ok(styles.length >= 6)
+  assert.equal(new Set(styles.map((s) => s.id)).size, styles.length)
+  const accents = new Set()
+  for (const listed of styles) {
+    const style = json(await call(client, 'get_style', { name: listed.id }))
+    assert.equal(style.name, listed.name)
+    assert.ok(style.composition.length > 50)
+    assert.ok(style.uses.length > 0)
+    assert.ok(style.avoid.length > 0)
+    assert.match(style.fontLinks, /fonts\.googleapis\.com/)
+    assert.match(style.theme, /@theme/)
+    assert.match(style.theme, /--color-on-accent:/)
+    for (const color of Object.values(style.colors)) assert.match(color, /^#[\da-f]{6}$/i)
+    accents.add(style.colors.accent)
+  }
+  assert.equal(accents.size, styles.length)
+  assert.equal(json(await call(client, 'get_style', { name: 'Field Notes' })).id, 'field-notes')
+  const bad = await client.callTool({ name: 'get_style', arguments: { name: 'missing-style' } })
+  assert.equal(bad.isError, true)
+  assert.match(bad.content[0].text, /studio-ledger/)
+})
+
+await check('style theme renders semantic Tailwind tokens as the specified color', async () => {
+  const style = json(await call(client, 'get_style', { name: 'studio-ledger' }))
+  const out = json(await call(client, 'create_frame', { name: 'Theme fixture', width: 390, height: 200, html: `${style.fontLinks}${style.theme}<div class="min-h-screen bg-canvas text-ink font-sans p-6">Project library</div>` }))
+  try {
+    const [img] = await call(client, 'review_frame', { id: out.created.id })
+    const png = PNG.sync.read(Buffer.from(img.data, 'base64'))
+    assert.deepEqual([...png.data.subarray(0, 3)], [245, 246, 248])
+  } finally {
+    await call(client, 'delete_frame', { id: out.created.id })
+  }
+})
+
+await check('guidelines tailor the screen type and reload bounded project DESIGN.md notes', async () => {
+  const file = join(project, 'DESIGN.md')
+  const absent = (await call(client, 'get_design_guidelines'))[0].text
+  assert.match(absent, /No project DESIGN.md found/)
+  const landing = (await call(client, 'get_design_guidelines', { screen_type: 'landing-page' }))[0].text
+  const dashboard = (await call(client, 'get_design_guidelines', { screen_type: 'dashboard' }))[0].text
+  assert.match(landing, /one conversion goal/)
+  assert.match(dashboard, /operational question/)
+  assert.notEqual(landing, dashboard)
+  try {
+    writeFileSync(file, '# Brand\nUse orchard green and an editorial serif.')
+    assert.match((await call(client, 'get_design_guidelines'))[0].text, /orchard green/)
+    writeFileSync(file, '# Updated brand\nUse brick red and compact spacing.')
+    const updated = (await call(client, 'get_design_guidelines'))[0].text
+    assert.match(updated, /brick red/)
+    assert.doesNotMatch(updated, /orchard green/)
+    writeFileSync(file, 'A'.repeat(20000) + 'SHOULD_NOT_BE_INCLUDED')
+    const bounded = (await call(client, 'get_design_guidelines'))[0].text
+    assert.match(bounded, /truncated after 16384 bytes/)
+    assert.doesNotMatch(bounded, /SHOULD_NOT_BE_INCLUDED/)
+  } finally {
+    unlinkSync(file)
+  }
+  assert.match((await call(client, 'get_design_guidelines'))[0].text, /No project DESIGN.md found/)
+  const bad = await client.callTool({ name: 'get_design_guidelines', arguments: { screen_type: 'unknown' } })
+  assert.equal(bad.isError, true)
+})
+
+await check('review_frame measures overflow and failed images, then reflects a repair', async () => {
+  const out = json(await call(client, 'create_frame', { name: 'Review fixture', width: 390, height: 200, html: '<div style="width:800px;min-height:1000px;background:white">Overflow<img src="data:image/png;base64,AA==" alt="Broken fixture"></div>' }))
+  try {
+    const before = await call(client, 'review_frame', { id: out.created.id })
+    assert.equal(before[0].type, 'image')
+    const report = JSON.parse(before[1].text)
+    assert.deepEqual(report.viewport, { width: 390, height: 200 })
+    assert.ok(report.horizontalOverflowPx >= 410)
+    assert.ok(report.clippedBelowFramePx >= 800)
+    assert.equal(report.failedImages.length, 1)
+    assert.equal(report.failedImages[0].alt, 'Broken fixture')
+    assert.equal(report.pendingImages, 0)
+    await call(client, 'update_frame', { id: out.created.id, height: 200, html: '<div style="width:100%;height:200px;background:white">Repaired layout</div>' })
+    const after = JSON.parse((await call(client, 'review_frame', { id: out.created.id }))[1].text)
+    assert.equal(after.horizontalOverflowPx, 0)
+    assert.equal(after.clippedBelowFramePx, 0)
+    assert.deepEqual(after.failedImages, [])
+    assert.equal(after.pendingImages, 0)
+  } finally {
+    await call(client, 'delete_frame', { id: out.created.id })
+  }
+})
+
+await check('project notes reject symbolic links and special files without reading them', async () => {
+  const file = join(project, 'DESIGN.md')
+  const target = join(project, 'private-test-notes.txt')
+  writeFileSync(target, 'This target must not enter the design context.')
+  try {
+    symlinkSync(target, file)
+    const link = await client.callTool({ name: 'get_design_guidelines', arguments: {} })
+    assert.equal(link.isError, true)
+    assert.match(link.content[0].text, /regular file/)
+    assert.doesNotMatch(link.content[0].text, /must not enter/)
+    unlinkSync(file)
+    execFileSync('mkfifo', [file])
+    const fifo = await client.callTool({ name: 'get_design_guidelines', arguments: {} })
+    assert.equal(fifo.isError, true)
+    assert.match(fifo.content[0].text, /regular file/)
+  } finally {
+    unlinkSync(file)
+    unlinkSync(target)
+  }
+  assert.ok(json(await call(client, 'get_canvas')).frames)
+})
+
+await check('a malformed review observation does not break ordinary screenshots', async () => {
+  const out = json(await call(client, 'create_frame', { name: 'Observation fixture', width: 390, height: 200, html: '<div>Visible design</div><script>Object.defineProperty(window,"innerWidth",{get:()=>"not a measurement"})</script>' }))
+  try {
+    const review = await client.callTool({ name: 'review_frame', arguments: { id: out.created.id } })
+    assert.equal(review.isError, true)
+    assert.equal((await call(client, 'screenshot_frame', { id: out.created.id }))[0].type, 'image')
+  } finally {
+    await call(client, 'delete_frame', { id: out.created.id })
+  }
 })
 
 await check('create_frame adds a frame, fits height to content, and shows it on the canvas', async () => {
@@ -196,6 +324,16 @@ await check('browser_capture_to_canvas puts a screenshot frame on the canvas', a
   await win.waitForSelector(`[data-frame-id="${out.created.id}"] img`)
   await framesTab()
   assert.equal(await win.locator('.layer').count(), 2)
+})
+
+await check('review_frame returns a reference screenshot without claiming an HTML audit', async () => {
+  const reference = json(await call(client, 'get_canvas')).frames.find((f) => f.kind === 'image')
+  const result = await call(client, 'review_frame', { id: reference.id })
+  assert.equal(result[0].type, 'image')
+  const report = JSON.parse(result[1].text)
+  assert.equal(report.kind, 'image')
+  assert.match(report.note, /HTML layout diagnostics are unavailable/)
+  assert.equal(report.horizontalOverflowPx, undefined)
 })
 
 await check('Pick element sends the clicked element to the agent context', async () => {
