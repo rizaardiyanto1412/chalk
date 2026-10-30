@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, type BrowserState } from './api'
+import { BROWSER_DEVICES, BROWSER_DEVICE_IDS } from '../../shared/model'
 import { Icon, type IconName } from './icons'
 
 interface Props {
@@ -15,6 +16,7 @@ export function BrowserPane({ state, recent, onClose }: Props) {
   const [editing, setEditing] = useState(false)
   const [capturing, setCapturing] = useState(false)
   const [home, setHome] = useState(false)
+  const viewport = BROWSER_DEVICES[state.device].viewport
   const hasPage = !!state.url && !state.url.startsWith('about:')
   const showPage = hasPage && !home
 
@@ -27,14 +29,17 @@ export function BrowserPane({ state, recent, onClose }: Props) {
   }, [state.loading])
 
   useEffect(() => {
-    void api.browser('visible', showPage)
-    if (!showPage) return
+    if (!showPage) {
+      void api.browser('visible', false)
+      return
+    }
     const el = slot.current!
     const report = () => {
       const r = el.getBoundingClientRect()
       void api.browser('bounds', { x: r.left, y: r.top, width: r.width, height: r.height })
     }
     report()
+    void api.browser('visible', true)
     const ro = new ResizeObserver(report)
     ro.observe(el)
     window.addEventListener('resize', report)
@@ -106,7 +111,14 @@ export function BrowserPane({ state, recent, onClose }: Props) {
         <button onClick={onClose} title="Close browser" aria-label="Close browser"><Icon name="panelRight" size={15} /></button>
       </div>
 
-      <div ref={slot} className="browser-slot">
+      <div className="browser-device-bar">
+        <label htmlFor="browser-device">Viewport</label>
+        <select id="browser-device" aria-label="Browser viewport" value={state.device} onChange={(e) => { void api.browser('device', e.target.value) }}>
+          {BROWSER_DEVICE_IDS.map((id) => <option key={id} value={id}>{BROWSER_DEVICES[id].label}</option>)}
+        </select>
+        <span>{viewport ? `${viewport.width} × ${viewport.height}` : 'Fits sidebar'}</span>
+      </div>
+      <div ref={slot} className={`browser-slot${state.device !== 'responsive' && showPage ? ' is-fixed' : ''}`}>
         {!showPage && (
           <div className="browser-home">
             <div className="home-mark"><Icon name="globe" size={22} /></div>

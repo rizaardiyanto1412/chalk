@@ -1,5 +1,5 @@
 import type { ChalkApi } from '../../preload'
-import type { AgentEvent, AgentStatus, BrowserPick, CopyImageResult, Doc, ExportActivity, ExportFormat, ExportResult, EditCommand, FrameCommand, NativeEditCommand, FrameId, Op } from '../../shared/model'
+import type { AgentEvent, AgentStatus, BrowserPick, BrowserState, CopyImageResult, Doc, ExportActivity, ExportFormat, ExportResult, EditCommand, FrameCommand, NativeEditCommand, FrameId, Op } from '../../shared/model'
 
 declare global {
   interface Window {
@@ -7,14 +7,7 @@ declare global {
   }
 }
 
-export interface BrowserState {
-  url: string
-  title: string
-  loading: boolean
-  canGoBack: boolean
-  canGoForward: boolean
-  picking: boolean
-}
+export type { BrowserState } from '../../shared/model'
 
 export interface InitState {
   doc: Doc

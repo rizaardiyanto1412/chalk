@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { nativeImage } from 'electron'
 import { z } from 'zod'
-import { findFrame, nextSlot, FRAME_GAP, type Frame, type FrameId, type HtmlFrame } from '../shared/model'
+import { BROWSER_DEVICE_IDS, findFrame, nextSlot, FRAME_GAP, type Frame, type FrameId, type HtmlFrame } from '../shared/model'
 import type { Store } from './store'
 import type { Browser } from './browser'
 import { renderUrl } from './render'
@@ -248,6 +248,15 @@ export const TOOLS: Tool[] = [
     input: {},
     readOnly: true,
     run: async (_a, ctx) => [text(ctx.browser.state())]
+  }),
+  tool({
+    name: 'browser_set_device',
+    description: 'Set the browser viewport preset: responsive follows the sidebar, phone is 390x844, tablet is 1180x820 CSS pixels. Fixed viewports fit inside the sidebar. Does not change user agent or emulate touch.',
+    input: { device: z.enum(BROWSER_DEVICE_IDS) },
+    run: async ({ device }, ctx) => {
+      ctx.focus({ mode: 'browser' })
+      return [text(await ctx.browser.setDevice(device))]
+    }
   }),
   tool({
     name: 'browser_navigate',

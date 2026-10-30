@@ -152,3 +152,21 @@ export type Arrangement =
   | { kind: 'align'; alignment: Alignment }
   | { kind: 'distribute'; axis: 'x' | 'y' }
   | { kind: 'stack'; direction: Stacking }
+
+export const BROWSER_DEVICE_IDS = ['responsive', 'phone', 'tablet'] as const
+export type BrowserDeviceId = (typeof BROWSER_DEVICE_IDS)[number]
+export const BROWSER_DEVICES: Record<BrowserDeviceId, { label: string; viewport: { width: number; height: number } | null }> = {
+  responsive: { label: 'Responsive', viewport: null },
+  phone: { label: 'Phone', viewport: { width: 390, height: 844 } },
+  tablet: { label: 'Tablet', viewport: { width: 1180, height: 820 } }
+}
+
+export interface BrowserState {
+  url: string
+  title: string
+  loading: boolean
+  canGoBack: boolean
+  canGoForward: boolean
+  picking: boolean
+  device: BrowserDeviceId
+}

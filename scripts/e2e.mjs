@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 import { checkExports } from './export-e2e.mjs'
 import { checkFrames } from './frames-e2e.mjs'
+import { checkBrowserDevices, checkBrowserDevicePreference } from './browser-devices-e2e.mjs'
 import { checkArrangement } from './arrangement-e2e.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -97,7 +98,7 @@ await check('MCP lists the shared canvas, design, and browser tools', async () =
   assert.deepEqual(tools.map((t) => t.name).sort(), [
     'get_canvas', 'get_frame', 'screenshot_frame', 'review_frame', 'export_frame', 'copy_frame_image', 'create_frame', 'update_frame', 'edit_frame', 'delete_frame',
     'get_style', 'get_design_guidelines', 'browser_state', 'browser_navigate', 'browser_snapshot', 'browser_click',
-    'browser_type', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_capture_to_canvas', 'browser_extract_styles'
+    'browser_set_device', 'browser_type', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_capture_to_canvas', 'browser_extract_styles'
   ].sort())
   assert.equal(tools.find((t) => t.name === 'get_style').annotations.readOnlyHint, true)
   assert.equal(tools.find((t) => t.name === 'review_frame').annotations.readOnlyHint, true)
@@ -512,8 +513,10 @@ await check('Undo restores a deleted frame and Redo deletes it again', async () 
 const framesClient = await mcp()
 await checkFrames({ app, win, client: framesClient, call, json, check, project, artifacts })
 await checkArrangement({ app, win, client: framesClient, call, json, check, project, artifacts })
+await checkBrowserDevices({ app, win, client: framesClient, call, json, check, artifacts })
 await framesClient.close()
 await app.close()
+await checkBrowserDevicePreference({ electron, root, project, artifacts, check })
 site.close()
 const failed = results.filter((r) => r[0] === 'FAIL').length
 const skipped = results.filter((r) => r[0] === 'SKIP').length

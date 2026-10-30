@@ -251,3 +251,8 @@ body.is-resizing iframe { pointer-events: none; }
 .arrangement-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 8px; }
 .arrangement-actions button { padding: 5px; border: 1px solid var(--line); border-radius: 5px; font-size: 11px; text-align: left; }
 .arrangement-actions button:hover:not(:disabled) { background: var(--hover); }
+
+.browser-device-bar { height: 32px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+.browser-device-bar select { max-width: 130px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--text); font: inherit; padding: 2px 5px; }
+.browser-device-bar select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.browser-slot.is-fixed { background: #e4e4e7; }

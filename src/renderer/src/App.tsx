@@ -23,7 +23,7 @@ export function App() {
   const [browserWidth, setBrowserWidth] = useState(() => stored('chalk.browserWidth', 560))
   const [tool, setTool] = useState<CanvasTool>('select')
   const [selection, setSelection] = useState<FrameId[]>([])
-  const [browser, setBrowser] = useState<BrowserState>({ url: '', title: '', loading: false, canGoBack: false, canGoForward: false, picking: false })
+  const [browser, setBrowser] = useState<BrowserState>({ url: '', title: '', loading: false, canGoBack: false, canGoForward: false, picking: false, device: 'responsive' })
   const [recent, setRecent] = useState<string[]>([])
   const [pick, setPick] = useState<BrowserPick | null>(null)
   const [events, setEvents] = useState<AgentEvent[]>([])

@@ -1,17 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { randomUUID } from 'node:crypto'
 import { WebContentsView, type BaseWindow, type Rectangle } from 'electron'
-import type { BrowserPick } from '../shared/model'
-
-export interface BrowserState {
-  url: string
-  title: string
-  loading: boolean
-  canGoBack: boolean
-  canGoForward: boolean
-  picking: boolean
-}
-
+import { BROWSER_DEVICES, type BrowserDeviceId, type BrowserPick, type BrowserState } from '../shared/model'
 
 const SNAPSHOT_JS = `(() => {
   const MAX = 450
@@ -116,20 +106,28 @@ export class Browser extends EventEmitter {
   /** Random per pick session, so a page cannot forge a pick by logging to the console. */
   private pickPrefix: string | null = null
 
-  constructor() {
+  private device: BrowserDeviceId
+  private slot: Rectangle = { x: 0, y: 0, width: 0, height: 0 }
+  private operations: Promise<unknown> = Promise.resolve()
+
+  constructor(device: BrowserDeviceId = 'responsive') {
     super()
+    this.device = device
     this.view = new WebContentsView({ webPreferences: { partition: 'persist:chalk-browser', sandbox: true } })
     this.view.setVisible(false)
     const wc = this.view.webContents
     wc.setUserAgent(wc.getUserAgent().replace(/ (Electron|chalk)\/\S+/g, ''))
     for (const ev of ['did-start-loading', 'did-stop-loading', 'did-navigate', 'did-navigate-in-page', 'page-title-updated'] as const) {
       wc.on(ev as 'did-stop-loading', () => {
-        if (ev === 'did-navigate') this.picking = false
+        if (ev === 'did-navigate') {
+          this.picking = false
+          void this.serialize(() => this.applyDevice()).catch((error) => console.error('Browser viewport navigation failed', error))
+        }
         this.emit('state', this.state())
       })
     }
     wc.setWindowOpenHandler(({ url }) => {
-      void wc.loadURL(url)
+      void this.navigate(url).catch((error) => console.error('Browser popup navigation failed', error))
       return { action: 'deny' }
     })
     wc.on('console-message', (e) => {
@@ -148,8 +146,52 @@ export class Browser extends EventEmitter {
     win.contentView.addChildView(this.view)
   }
 
-  setBounds(b: Rectangle): void {
-    this.view.setBounds({ x: Math.round(b.x), y: Math.round(b.y), width: Math.round(b.width), height: Math.round(b.height) })
+  private serialize<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.operations.then(operation)
+    this.operations = result.catch(() => {})
+    return result
+  }
+
+  private fitBounds(): number {
+    const viewport = BROWSER_DEVICES[this.device].viewport
+    if (!viewport) {
+      this.view.setBounds(this.slot)
+      return 1
+    }
+    const scale = this.slot.width > 0 && this.slot.height > 0 ? Math.min(1, this.slot.width / viewport.width, this.slot.height / viewport.height) : 1
+    const width = Math.min(this.slot.width, Math.floor(viewport.width * scale))
+    const height = Math.min(this.slot.height, Math.floor(viewport.height * scale))
+    this.view.setBounds({ x: this.slot.x + Math.floor((this.slot.width - width) / 2), y: this.slot.y, width, height })
+    return scale
+  }
+
+  private async applyDevice(): Promise<void> {
+    const viewport = BROWSER_DEVICES[this.device].viewport
+    const scale = this.fitBounds()
+    if (!this.view.webContents.getURL()) return
+    const dbg = this.view.webContents.debugger
+    if (!dbg.isAttached()) dbg.attach('1.3')
+    if (viewport) {
+      await dbg.sendCommand('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 0, mobile: false, scale })
+    } else {
+      await dbg.sendCommand('Emulation.clearDeviceMetricsOverride')
+    }
+  }
+
+  setBounds(b: Rectangle): Promise<void> {
+    this.slot = { x: Math.ceil(b.x), y: Math.ceil(b.y), width: Math.max(0, Math.floor(b.x + b.width) - Math.ceil(b.x)), height: Math.max(0, Math.floor(b.y + b.height) - Math.ceil(b.y)) }
+    this.fitBounds()
+    return this.serialize(() => this.applyDevice())
+  }
+
+  setDevice(device: BrowserDeviceId): Promise<BrowserState> {
+    return this.serialize(async () => {
+      this.device = device
+      await this.applyDevice()
+      const state = this.state()
+      this.emit('state', state)
+      return state
+    })
   }
 
   setVisible(v: boolean): void {
@@ -164,7 +206,8 @@ export class Browser extends EventEmitter {
       loading: wc.isLoading(),
       canGoBack: wc.navigationHistory.canGoBack(),
       canGoForward: wc.navigationHistory.canGoForward(),
-      picking: this.picking
+      picking: this.picking,
+      device: this.device
     }
   }
 
@@ -176,21 +219,27 @@ export class Browser extends EventEmitter {
       if (!String(err).includes('ERR_ABORTED')) throw err
     }
     await this.settle()
+    await this.serialize(() => this.applyDevice())
     return this.state()
   }
 
   async back(): Promise<BrowserState> {
     this.view.webContents.navigationHistory.goBack()
     await this.settle()
+    await this.serialize(() => this.applyDevice())
     return this.state()
   }
 
-  forward(): void {
+  async forward(): Promise<void> {
     this.view.webContents.navigationHistory.goForward()
+    await this.settle()
+    await this.serialize(() => this.applyDevice())
   }
 
-  reload(): void {
+  async reload(): Promise<void> {
     this.view.webContents.reload()
+    await this.settle()
+    await this.serialize(() => this.applyDevice())
   }
 
   /** Wait for loading to finish plus a short quiet period for client-side rendering. */
@@ -201,7 +250,7 @@ export class Browser extends EventEmitter {
   }
 
   snapshot(): Promise<{ url: string; title: string; scrollY: number; pageHeight: number; viewport: string; tree: string }> {
-    return this.view.webContents.executeJavaScript(SNAPSHOT_JS)
+    return this.serialize(() => this.view.webContents.executeJavaScript(SNAPSHOT_JS))
   }
 
   extractStyles(): Promise<Record<string, unknown>> {
@@ -240,23 +289,30 @@ export class Browser extends EventEmitter {
 
   /** Capture the viewport, the whole page, or one element (by snapshot ref) as PNG via CDP. */
   async screenshot(opts: { fullPage?: boolean; ref?: string } = {}): Promise<{ png: Buffer; width: number; height: number }> {
-    const wc = this.view.webContents
-    const dbg = wc.debugger
-    if (!dbg.isAttached()) dbg.attach('1.3')
-    let clip: { x: number; y: number; width: number; height: number } | undefined
-    if (opts.ref) {
-      clip = await this.withRef(opts.ref, (el) => `const r = ${el}.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, width: r.width, height: r.height }`)
-    } else if (opts.fullPage) {
-      const m = (await dbg.sendCommand('Page.getLayoutMetrics')) as { cssContentSize: { width: number; height: number } }
-      clip = { x: 0, y: 0, width: m.cssContentSize.width, height: Math.min(m.cssContentSize.height, 10000) }
-    }
-    const res = (await dbg.sendCommand('Page.captureScreenshot', {
-      format: 'png',
-      captureBeyondViewport: !!clip,
-      ...(clip ? { clip: { ...clip, scale: 1 } } : {})
-    })) as { data: string }
-    const png = Buffer.from(res.data, 'base64')
-    return { png, width: png.readUInt32BE(16), height: png.readUInt32BE(20) }
+    if (!this.view.webContents.getURL()) throw new Error('No page loaded. Call browser_navigate first.')
+    return this.serialize(async () => {
+      try {
+        const wc = this.view.webContents
+        const dbg = wc.debugger
+        await this.applyDevice()
+        let clip: { x: number; y: number; width: number; height: number } | undefined
+        if (opts.ref) {
+          clip = await this.withRef(opts.ref, (el) => `const r = ${el}.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, width: r.width, height: r.height }`)
+        } else if (opts.fullPage) {
+          const m = (await dbg.sendCommand('Page.getLayoutMetrics')) as { cssContentSize: { width: number; height: number } }
+          clip = { x: 0, y: 0, width: Math.max(m.cssContentSize.width, BROWSER_DEVICES[this.device].viewport?.width ?? 0), height: Math.min(m.cssContentSize.height, 10000) }
+        }
+        const res = (await dbg.sendCommand('Page.captureScreenshot', {
+          format: 'png',
+          captureBeyondViewport: !!clip,
+          ...(clip ? { clip: { ...clip, scale: 1 } } : {})
+        })) as { data: string }
+        const png = Buffer.from(res.data, 'base64')
+        return { png, width: png.readUInt32BE(16), height: png.readUInt32BE(20) }
+      } finally {
+        await this.applyDevice()
+      }
+    })
   }
 
   async startPick(): Promise<void> {

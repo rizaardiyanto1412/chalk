@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { Server } from 'node:http'
-import { EXPORT_FORMATS, findFrame, type CopyImageResult, type ExportActivity, type ExportResult, type EditCommand, type NativeEditCommand, type FrameId, type Op } from '../shared/model'
+import { BROWSER_DEVICE_IDS, type BrowserDeviceId, EXPORT_FORMATS, findFrame, type CopyImageResult, type ExportActivity, type ExportResult, type EditCommand, type NativeEditCommand, type FrameId, type Op } from '../shared/model'
 import { Store } from './store'
 import { FrameCommands, frameIdSchema, safeAssetName } from './frameCommands'
 import { Browser } from './browser'
@@ -29,6 +29,7 @@ interface Config {
   /** Project folders open as tabs, in tab order. */
   projects: string[]
   recentUrls: string[]
+  browserDevice?: BrowserDeviceId
 }
 
 const configFile = () => join(app.getPath('userData'), 'config.json')
@@ -37,7 +38,7 @@ const legacyConfigFile = () => join(app.getPath('appData'), 'Easel', 'config.jso
 function readConfig(): Config {
   try {
     const c = JSON.parse(readFileSync(existsSync(configFile()) ? configFile() : legacyConfigFile(), 'utf8'))
-    return { projectDir: c.projectDir, projects: Array.isArray(c.projects) ? c.projects : [], recentUrls: Array.isArray(c.recentUrls) ? c.recentUrls : [] }
+    return { browserDevice: z.enum(BROWSER_DEVICE_IDS).catch('responsive').parse(c.browserDevice), projectDir: c.projectDir, projects: Array.isArray(c.projects) ? c.projects : [], recentUrls: Array.isArray(c.recentUrls) ? c.recentUrls : [] }
   } catch {
     return { projects: [], recentUrls: [] }
   }
@@ -279,8 +280,10 @@ function registerIpc(): void {
   })
   handle('browser', async (_e, action: string, arg?: unknown) => {
     switch (action) {
+      case 'device':
+        return browser.setDevice(z.enum(BROWSER_DEVICE_IDS).parse(arg))
       case 'bounds':
-        return browser.setBounds(arg as Electron.Rectangle)
+        return browser.setBounds(z.object({ x: z.number().finite(), y: z.number().finite(), width: z.number().finite().nonnegative(), height: z.number().finite().nonnegative() }).parse(arg))
       case 'visible':
         return browser.setVisible(!!arg)
       case 'navigate':
@@ -381,7 +384,7 @@ app.whenReady().then(async () => {
   store.open(first)
   updateConfig({ projectDir: first, projects: [...new Set([...config.projects.filter((p) => existsSync(p)), first])] })
 
-  browser = new Browser()
+  browser = new Browser(config.browserDevice)
   toolContext = {
     store,
     browser,
@@ -403,7 +406,10 @@ app.whenReady().then(async () => {
     send('doc', doc)
     send('selection', store.selection)
   })
-  browser.on('state', (s) => send('browser:state', s))
+  browser.on('state', (s) => {
+    if (config.browserDevice !== s.device) updateConfig({ browserDevice: s.device })
+    send('browser:state', s)
+  })
   browser.view.webContents.on('did-navigate', (_e, url) => rememberUrl(url))
   browser.on('pick', (pick) => {
     store.browserPick = pick
