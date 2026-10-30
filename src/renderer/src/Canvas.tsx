@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import { EXPORT_FORMATS, type Doc, type Frame, type FrameId } from '../../shared/model'
+import { EXPORT_FORMATS, type Doc, type Frame, type FrameId, type HtmlFrame } from '../../shared/model'
+import { frameSize, translated } from '../../shared/frameGeometry'
 import { api } from './api'
 import { nativeEditing, selectedText } from './editFocus'
 import { Icon } from './icons'
@@ -13,7 +14,8 @@ interface Camera {
 type Gesture =
   | { kind: 'idle' }
   | { kind: 'pan'; sx: number; sy: number; cam: Camera }
-  | { kind: 'move'; id: FrameId; sx: number; sy: number; fx: number; fy: number; moved: boolean }
+  | { kind: 'move'; frames: Frame[]; id: FrameId; sx: number; sy: number; dx: number; dy: number; moved: boolean; collapse: boolean }
+  | { kind: 'nudge'; frames: Frame[]; dx: number; dy: number; keys: Set<string> }
   | { kind: 'resize'; id: FrameId; sx: number; sy: number; w: number; h: number }
 
 type Draft = Partial<Record<FrameId, Partial<Pick<Frame, 'x' | 'y' | 'width' | 'height'>>>>
@@ -29,6 +31,7 @@ export type CanvasTool = 'select' | 'hand'
 interface Props {
   doc: Doc
   port: number
+  projectEpoch: number
   selection: FrameId[]
   onSelect: (ids: FrameId[]) => void
   onZoom: (zoom: number) => void
@@ -40,13 +43,38 @@ const MIN_ZOOM = 0.05
 const MAX_ZOOM = 4
 const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
 
-export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, port, selection, onSelect, onZoom, tool, exportBusy }, ref) {
+export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, port, projectEpoch, selection, onSelect, onZoom, tool, exportBusy }, ref) {
   const host = useRef<HTMLDivElement>(null)
   const [cam, setCam] = useState<Camera>({ x: 80, y: 80, zoom: 0.5 })
   const gesture = useRef<Gesture>({ kind: 'idle' })
+  const [pointerMode, setPointerMode] = useState<'idle' | 'pan' | 'move' | 'resize'>('idle')
   const [draft, setDraft] = useState<Draft>({})
+  const draftRef = useRef<Draft>({})
+  const preview = (next: Draft) => { draftRef.current = next; setDraft(next) }
+  const cancelGesture = useCallback(() => {
+    gesture.current = { kind: 'idle' }
+    setPointerMode('idle')
+    draftRef.current = {}
+    setDraft({})
+  }, [])
   const [space, setSpace] = useState(false)
   const [live, setLive] = useState<FrameId | null>(null)
+
+  useEffect(() => {
+    const g = gesture.current
+    const ids = g.kind === 'move' || g.kind === 'nudge' ? g.frames.map((f) => f.id) : g.kind === 'resize' ? [g.id] : []
+    if (ids.some((id) => !doc.frames.some((f) => f.id === id) || !selection.includes(id))) cancelGesture()
+    if (live && !doc.frames.some((f) => f.id === live)) setLive(null)
+  }, [doc, selection, live, cancelGesture])
+
+  useEffect(() => {
+    const blur = () => { cancelGesture(); setSpace(false) }
+    const focus = () => { if (nativeEditing()) cancelGesture() }
+    window.addEventListener('blur', blur)
+    window.addEventListener('focusin', focus)
+    const off = api.on.history(cancelGesture)
+    return () => { window.removeEventListener('blur', blur); window.removeEventListener('focusin', focus); off() }
+  }, [cancelGesture])
 
   useEffect(() => onZoom(cam.zoom), [cam.zoom, onZoom])
 
@@ -122,11 +150,25 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (nativeEditing() || selectedText()) return
-      if (e.code === 'Space') setSpace(true)
+      if (e.key.startsWith('Arrow') && !e.metaKey && !e.ctrlKey && !e.altKey && selection.length) {
+        if (gesture.current.kind !== 'idle' && gesture.current.kind !== 'nudge') return
+        if (gesture.current.kind === 'idle' && e.repeat) return
+        e.preventDefault()
+        if (gesture.current.kind === 'idle') gesture.current = { kind: 'nudge', frames: doc.frames.filter((f) => selection.includes(f.id)), dx: 0, dy: 0, keys: new Set() }
+        const g = gesture.current
+        if (g.kind !== 'nudge') return
+        g.keys.add(e.key)
+        const amount = e.shiftKey ? 10 : 1
+        g.dx += e.key === 'ArrowLeft' ? -amount : e.key === 'ArrowRight' ? amount : 0
+        g.dy += e.key === 'ArrowUp' ? -amount : e.key === 'ArrowDown' ? amount : 0
+        preview(Object.fromEntries(translated(g.frames, g.dx, g.dy).map(({ id, x, y }) => [id, { x, y }])))
+      } else if (e.code === 'Space') setSpace(true)
       else if (e.key === 'Backspace' || e.key === 'Delete') {
+        cancelGesture()
         e.preventDefault()
         void api.frameCommand({ type: 'delete' })
       } else if (e.key === 'Escape') {
+        cancelGesture()
         setLive(null)
         onSelect([])
       } else if ((e.metaKey && e.key === '0') || (e.shiftKey && e.key === '!')) {
@@ -143,16 +185,23 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
         if (f) fitRect(f, 1)
       }
     }
-    const up = (e: KeyboardEvent) => e.code === 'Space' && setSpace(false)
+    const up = (e: KeyboardEvent) => {
+      if (e.code === 'Space') setSpace(false)
+      const g = gesture.current
+      if (g.kind !== 'nudge' || !g.keys.delete(e.key) || g.keys.size) return
+      if (!nativeEditing() && !selectedText()) void api.frameCommand({ type: 'arrange', ids: g.frames.map((f) => f.id), projectEpoch, operation: { kind: 'translate', dx: g.dx, dy: g.dy } })
+      cancelGesture()
+    }
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
     return () => {
       window.removeEventListener('keydown', down)
       window.removeEventListener('keyup', up)
     }
-  }, [selection, onSelect, fit, fitRect, doc.frames, zoomBy])
+  }, [selection, onSelect, fit, fitRect, doc.frames, zoomBy, projectEpoch, cancelGesture])
 
   useEffect(() => api.on.edit((command) => {
+    cancelGesture()
     if (nativeEditing() || selectedText()) {
       if (command !== 'duplicate') void api.nativeEdit(command)
       return
@@ -167,34 +216,44 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
       return
     }
     void api.frameCommand({ type: command })
-  }), [cam, doc.frames, selection, onSelect])
+  }), [cam, doc.frames, selection, onSelect, cancelGesture])
 
   const onPointerDown = (e: React.PointerEvent) => {
     const target = e.target as HTMLElement
     const frameEl = target.closest<HTMLElement>('[data-frame-id]')
     const handle = target.closest<HTMLElement>('[data-handle]')
-    if (target.closest('[data-toolbar]')) return
+    if (target.closest('[data-toolbar]') || e.button > 1) return
+    cancelGesture()
     host.current?.focus()
     window.getSelection()?.removeAllRanges()
-    host.current!.setPointerCapture(e.pointerId)
+    ;(frameEl ?? host.current)?.setPointerCapture(e.pointerId)
     const panTool = space || tool === 'hand'
     if (panTool || e.button === 1 || !frameEl) {
       gesture.current = { kind: 'pan', sx: e.clientX, sy: e.clientY, cam }
+      setPointerMode('pan')
       if (!panTool && e.button === 0 && !frameEl) {
         onSelect([])
         setLive(null)
       }
       return
     }
-    const id = frameEl.dataset.frameId as FrameId
-    const f = doc.frames.find((fr) => fr.id === id)!
+    const f = doc.frames.find((fr) => fr.id === frameEl.dataset.frameId)
+    if (!f) return
+    const id = f.id
     if (handle) {
       gesture.current = { kind: 'resize', id, sx: e.clientX, sy: e.clientY, w: f.width, h: f.height }
+      setPointerMode('resize')
       return
     }
     if (live === id && !target.closest('[data-label]')) return
-    onSelect(e.shiftKey ? [...new Set([...selection, id])] : [id])
-    gesture.current = { kind: 'move', id, sx: e.clientX, sy: e.clientY, fx: f.x, fy: f.y, moved: false }
+    if (e.shiftKey && selection.includes(id)) {
+      onSelect(selection.filter((selected) => selected !== id))
+      return
+    }
+    const ids = e.shiftKey ? [...selection, id] : selection.includes(id) ? selection : [id]
+    onSelect(ids)
+    gesture.current = { kind: 'move', id, frames: doc.frames.filter((f) => ids.includes(f.id)), sx: e.clientX, sy: e.clientY, dx: 0, dy: 0, moved: false, collapse: !e.shiftKey }
+    setPointerMode('move')
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -205,30 +264,35 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
       const dy = (e.clientY - g.sy) / cam.zoom
       if (!g.moved && Math.hypot(dx, dy) * cam.zoom < 3) return
       g.moved = true
-      setDraft({ [g.id]: { x: Math.round(g.fx + dx), y: Math.round(g.fy + dy) } })
+      g.dx = Math.round(dx)
+      g.dy = Math.round(dy)
+      preview(Object.fromEntries(translated(g.frames, g.dx, g.dy).map(({ id, x, y }) => [id, { x, y }])))
     } else if (g.kind === 'resize') {
-      setDraft({ [g.id]: { width: Math.max(200, Math.round(g.w + (e.clientX - g.sx) / cam.zoom)), height: Math.max(100, Math.round(g.h + (e.clientY - g.sy) / cam.zoom)) } })
+      preview({ [g.id]: { width: frameSize('width', g.w + (e.clientX - g.sx) / cam.zoom), height: frameSize('height', g.h + (e.clientY - g.sy) / cam.zoom) } })
     }
   }
 
   const onPointerUp = () => {
     const g = gesture.current
-    gesture.current = { kind: 'idle' }
-    if (g.kind === 'move' || g.kind === 'resize') {
-      const d = draft[g.id]
-      if (d && doc.frames.some((f) => f.id === g.id)) void api.op({ type: 'patch', id: g.id, patch: d })
-      setDraft({})
+    if (g.kind === 'move') {
+      if (g.moved) void api.frameCommand({ type: 'arrange', ids: g.frames.map((f) => f.id), projectEpoch, operation: { kind: 'translate', dx: g.dx, dy: g.dy } })
+      else if (g.collapse) onSelect([g.id])
+    } else if (g.kind === 'resize') {
+      const patch = draftRef.current[g.id]
+      if (patch && doc.frames.some((f) => f.id === g.id)) void api.op({ type: 'patch', id: g.id, patch })
     }
+    cancelGesture()
   }
 
   const selected = doc.frames.filter((f) => selection.includes(f.id))
-  const panning = gesture.current.kind === 'pan'
+  const panning = pointerMode === 'pan'
+  const pointerGesture = pointerMode !== 'idle'
 
   return (
     <div
       ref={host}
       tabIndex={-1}
-      className={`canvas ${space || tool === 'hand' ? 'is-space' : ''} ${panning ? 'is-panning' : ''}`}
+      className={`canvas ${space || tool === 'hand' ? 'is-space' : ''} ${panning ? 'is-panning' : ''} ${pointerGesture ? 'is-gesturing' : ''}`}
       onDragOver={(e) => {
         if ([...e.dataTransfer.items].some((i) => i.type.startsWith('image/'))) e.preventDefault()
       }}
@@ -246,6 +310,8 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
+      onPointerCancel={cancelGesture}
+      onLostPointerCapture={() => { if (gesture.current.kind !== 'nudge') cancelGesture() }}
       onDoubleClick={(e) => {
         const id = (e.target as HTMLElement).closest<HTMLElement>('[data-frame-id]')?.dataset.frameId as FrameId | undefined
         if (id && doc.frames.find((f) => f.id === id)?.kind === 'html') setLive(id)
@@ -264,7 +330,7 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
                 <span className="frame-size">{box.width} × {box.height}</span>
               </div>
               {f.kind === 'html' ? (
-                <FrameView title={f.name} src={`http://127.0.0.1:${port}/frame/${f.id}?v=${f.updatedAt}`} />
+                <FrameView frame={f} port={port} />
               ) : (
                 <img src={`http://127.0.0.1:${port}/assets/${f.asset}`} alt={f.name} draggable={false} />
               )}
@@ -355,7 +421,14 @@ function FrameToolbar({ frame, cam, live, busy, onLive, onDelete }: { frame: Fra
 }
 
 /** Keep the last loaded render on screen until the new one has loaded and styled, so edits never flash white. */
-function FrameView({ title, src }: { title: string; src: string }) {
+function FrameView({ frame, port }: { frame: HtmlFrame; port: number }) {
+  const revision = useRef({ frame, port, src: `http://127.0.0.1:${port}/frame/${frame.id}?v=${frame.updatedAt}` })
+  const previous = revision.current
+  if (previous.port !== port || previous.frame.id !== frame.id || previous.frame.html !== frame.html || previous.frame.name !== frame.name) {
+    revision.current = { frame, port, src: `http://127.0.0.1:${port}/frame/${frame.id}?v=${frame.updatedAt}` }
+  }
+  const src = revision.current.src
+  const title = frame.name
   const [shown, setShown] = useState(src)
   const [pending, setPending] = useState<string | null>(null)
   useEffect(() => {

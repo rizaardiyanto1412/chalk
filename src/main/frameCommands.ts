@@ -4,7 +4,7 @@ import { constants, closeSync, fstatSync, lstatSync, openSync, readFileSync, rea
 import { basename, join } from 'node:path'
 import { z } from 'zod'
 import { FRAME_GAP, nextSlot, type Frame, type FrameCommand, type FrameId } from '../shared/model'
-import { cloneFrames, frameBounds, FRAME_PRESETS } from '../shared/frameGeometry'
+import { arrangementOps, cloneFrames, frameBounds, FRAME_PRESETS } from '../shared/frameGeometry'
 import type { Store } from './store'
 
 const MIME = 'application/x-chalk-frames'
@@ -17,7 +17,17 @@ const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('cut') }),
   z.object({ type: z.literal('selectAll') }),
   z.object({ type: z.literal('delete') }),
-  z.object({ type: z.literal('paste'), anchor: z.object({ x: z.number().finite(), y: z.number().finite() }) })
+  z.object({ type: z.literal('paste'), anchor: z.object({ x: z.number().finite(), y: z.number().finite() }) }),
+  z.object({
+    type: z.literal('arrange'), ids: z.array(frameIdSchema), projectEpoch: z.number().int(),
+    operation: z.discriminatedUnion('kind', [
+      z.object({ kind: z.literal('translate'), dx: z.number().finite(), dy: z.number().finite() }),
+      z.object({ kind: z.literal('geometry'), field: z.enum(['x', 'y', 'width', 'height']), value: z.number().finite() }),
+      z.object({ kind: z.literal('align'), alignment: z.enum(['left', 'hcenter', 'right', 'top', 'vcenter', 'bottom']) }),
+      z.object({ kind: z.literal('distribute'), axis: z.enum(['x', 'y']) }),
+      z.object({ kind: z.literal('stack'), direction: z.enum(['front', 'back', 'forward', 'backward']) })
+    ])
+  })
 ])
 
 export function safeAssetName(name: string): boolean {
@@ -90,6 +100,10 @@ export class FrameCommands {
         this.select(copies.map((f) => f.id), focus)
       }
       switch (command.type) {
+        case 'arrange':
+          if (command.projectEpoch !== store.projectEpoch || command.ids.some((id) => !doc.frames.some((f) => f.id === id))) return
+          store.dispatch(arrangementOps(doc.frames, command.ids, command.operation))
+          return
         case 'delete':
           checkProject()
           store.dispatch(frames.map((f) => ({ type: 'delete', id: f.id })))

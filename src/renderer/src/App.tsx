@@ -4,6 +4,7 @@ import { api, type BrowserState, type InitState, type ProjectTab } from './api'
 import { Canvas, type CanvasHandle, type CanvasTool } from './Canvas'
 import { BrowserPane } from './BrowserPane'
 import { Chat } from './Chat'
+import { Inspector } from './Inspector'
 import { nativeEditing } from './editFocus'
 import { Icon, type IconName } from './icons'
 
@@ -14,7 +15,7 @@ const stored = (key: string, fallback: number) => Number(localStorage.getItem(ke
 export function App() {
   const [init, setInit] = useState<InitState | null>(null)
   const [doc, setDoc] = useState<Doc>({ version: 1, frames: [] })
-  const [project, setProject] = useState({ dir: '', name: '' })
+  const [project, setProject] = useState({ dir: '', name: '', epoch: 0 })
   const [tabs, setTabs] = useState<ProjectTab[]>([])
   const [leftTab, setLeftTab] = useState<LeftTab>('agent')
   const [leftOpen, setLeftOpen] = useState(true)
@@ -185,6 +186,7 @@ export function App() {
                 </div>
                 {leftTab === 'frames' && (
                   <div className="layer-list">
+                    <Inspector frames={selectedFrames} projectEpoch={project.epoch} />
                     {doc.frames.length === 0 && <p className="layers-empty">Frames you and the agent make show up here.</p>}
                     {doc.frames.map((f) => (
                       <LayerRow
@@ -192,9 +194,9 @@ export function App() {
                         name={f.name}
                         kind={f.kind}
                         selected={selection.includes(f.id)}
-                        onSelect={() => {
-                          select([f.id])
-                          setTimeout(() => canvas.current?.focusFrame(f.id), 0)
+                        onSelect={(shift) => {
+                          select(shift ? selection.includes(f.id) ? selection.filter((id) => id !== f.id) : [...selection, f.id] : [f.id])
+                          if (!shift) setTimeout(() => canvas.current?.focusFrame(f.id), 0)
                         }}
                         onRename={(name) => api.op({ type: 'patch', id: f.id, patch: { name } })}
                       />
@@ -218,7 +220,7 @@ export function App() {
           </div>
 
           <main className="stage">
-            <Canvas ref={canvas} doc={doc} port={init.port} selection={selection} onSelect={select} onZoom={setZoom} tool={tool} exportBusy={exportActivity?.status === 'busy'} />
+            <Canvas key={project.epoch} ref={canvas} doc={doc} port={init.port} projectEpoch={project.epoch} selection={selection} onSelect={select} onZoom={setZoom} tool={tool} exportBusy={exportActivity?.status === 'busy'} />
             {exportActivity && (
               <div className={`export-notice ${exportActivity.status === 'error' ? 'is-error' : ''}`} role={exportActivity.status === 'error' ? 'alert' : 'status'}>
                 <span>{exportActivity.status === 'busy' || exportActivity.status === 'error'
@@ -264,10 +266,10 @@ function ToolButton({ icon, label, on, onClick }: { icon: IconName; label: strin
   )
 }
 
-function LayerRow({ name, kind, selected, onSelect, onRename }: { name: string; kind: 'html' | 'image'; selected: boolean; onSelect: () => void; onRename: (n: string) => void }) {
+function LayerRow({ name, kind, selected, onSelect, onRename }: { name: string; kind: 'html' | 'image'; selected: boolean; onSelect: (shift: boolean) => void; onRename: (n: string) => void }) {
   const [editing, setEditing] = useState(false)
   return (
-    <div className={`layer ${selected ? 'is-selected' : ''}`} onClick={onSelect} onDoubleClick={() => setEditing(true)}>
+    <div className={`layer ${selected ? 'is-selected' : ''}`} onClick={(event) => onSelect(event.shiftKey)} onDoubleClick={() => setEditing(true)}>
       <Icon name={kind === 'image' ? 'image' : 'frame'} size={13} />
       {editing ? (
         <input

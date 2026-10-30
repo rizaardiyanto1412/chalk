@@ -11,11 +11,13 @@ import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 import { checkExports } from './export-e2e.mjs'
 import { checkFrames } from './frames-e2e.mjs'
+import { checkArrangement } from './arrangement-e2e.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const artifacts = process.env.CHALK_E2E_ARTIFACTS || join(root, 'e2e-artifacts')
 mkdirSync(artifacts, { recursive: true })
 const project = realpathSync(mkdtempSync(join(tmpdir(), 'chalk-e2e-')))
+const profile = realpathSync(mkdtempSync(join(tmpdir(), 'chalk-e2e-profile-')))
 const PORT = 7911
 const results = []
 const check = async (name, fn) => {
@@ -49,7 +51,7 @@ await new Promise((r) => site.listen(7912, '127.0.0.1', r))
 const SITE = 'http://127.0.0.1:7912'
 
 const launch = () =>
-  electron.launch({ args: [root], cwd: root, env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'ELECTRON_RUN_AS_NODE')), CHALK_PROJECT_DIR: project, CHALK_PORT: String(PORT), ELECTRON_RENDERER_URL: '' } })
+  electron.launch({ args: [root, `--user-data-dir=${profile}`], cwd: root, env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'ELECTRON_RUN_AS_NODE')), CHALK_PROJECT_DIR: project, CHALK_PORT: String(PORT), ELECTRON_RENDERER_URL: '' } })
 
 async function mcp() {
   const client = new Client({ name: 'e2e', version: '0' })
@@ -64,6 +66,13 @@ const call = async (client, name, args = {}) => {
 const json = (content) => JSON.parse(content[0].text)
 
 let app = await launch()
+const actualProfile = await app.evaluate(({ app }) => app.getPath('userData'))
+if (realpathSync(actualProfile) !== profile) {
+  await app.close()
+  site.close()
+  throw new Error('Electron must use the temporary test profile.')
+}
+writeFileSync(join(artifacts, 'test-environment.json'), JSON.stringify({ project, profile, actualProfile }, null, 2))
 let win = await app.firstWindow()
 await win.waitForSelector('.titlebar')
 const client = await mcp()
@@ -502,6 +511,7 @@ await check('Undo restores a deleted frame and Redo deletes it again', async () 
 
 const framesClient = await mcp()
 await checkFrames({ app, win, client: framesClient, call, json, check, project, artifacts })
+await checkArrangement({ app, win, client: framesClient, call, json, check, project, artifacts })
 await framesClient.close()
 await app.close()
 site.close()

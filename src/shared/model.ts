@@ -59,23 +59,25 @@ export function applyOp(doc: Doc, op: Op, now = Date.now()): Doc {
   switch (op.type) {
     case 'add':
       return { ...doc, frames: [...doc.frames, op.frame] }
-    case 'patch':
-      return {
-        ...doc,
-        frames: doc.frames.map((f) => {
-          if (f.id !== op.id) return f
-          const { html, ...rest } = op.patch
-          const next = { ...f, ...rest, updatedAt: now }
-          return f.kind === 'html' && html !== undefined ? { ...next, html } : next
-        })
-      }
+    case 'patch': {
+      const frames = doc.frames.map((f) => {
+        if (f.id !== op.id) return f
+        const { html, ...rest } = op.patch
+        const keys: (keyof typeof rest)[] = ['name', 'x', 'y', 'width', 'height']
+        if (!keys.some((key) => rest[key] !== undefined && rest[key] !== f[key]) && !(f.kind === 'html' && html !== undefined && html !== f.html)) return f
+        const next = { ...f, ...rest, updatedAt: now }
+        return f.kind === 'html' && html !== undefined ? { ...next, html } : next
+      })
+      return frames.every((f, i) => f === doc.frames[i]) ? doc : { ...doc, frames }
+    }
     case 'delete':
       return { ...doc, frames: doc.frames.filter((f) => f.id !== op.id) }
     case 'reorder': {
       const byId = new Map(doc.frames.map((f) => [f.id, f]))
       const ordered = op.ids.flatMap((id) => byId.get(id) ?? [])
       const rest = doc.frames.filter((f) => !op.ids.includes(f.id))
-      return { ...doc, frames: [...ordered, ...rest] }
+      const frames = [...ordered, ...rest]
+      return frames.length === doc.frames.length && frames.every((f, i) => f === doc.frames[i]) ? doc : { ...doc, frames }
     }
   }
 }
@@ -139,3 +141,14 @@ export type FrameCommand =
   | { type: 'create'; preset: 'desktop' | 'mobile' }
   | { type: 'duplicate' | 'copy' | 'cut' | 'selectAll' | 'delete' }
   | { type: 'paste'; anchor: { x: number; y: number } }
+  | { type: 'arrange'; ids: FrameId[]; projectEpoch: number; operation: Arrangement }
+
+export type GeometryField = 'x' | 'y' | 'width' | 'height'
+export type Alignment = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom'
+export type Stacking = 'front' | 'back' | 'forward' | 'backward'
+export type Arrangement =
+  | { kind: 'translate'; dx: number; dy: number }
+  | { kind: 'geometry'; field: GeometryField; value: number }
+  | { kind: 'align'; alignment: Alignment }
+  | { kind: 'distribute'; axis: 'x' | 'y' }
+  | { kind: 'stack'; direction: Stacking }

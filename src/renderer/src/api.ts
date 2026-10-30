@@ -18,7 +18,7 @@ export interface BrowserState {
 
 export interface InitState {
   doc: Doc
-  project: { dir: string; name: string }
+  project: { dir: string; name: string; epoch: number }
   port: number
   mcpUrl: string
   claudePath: string | null
@@ -61,7 +61,7 @@ export const api = {
     frameError: (fn: (message: string) => void) => e().on('frames:error', fn),
     exportActivity: (fn: (activity: ExportActivity) => void) => e().on('export:activity', fn),
     doc: (fn: (d: Doc) => void) => e().on('doc', fn),
-    project: (fn: (p: { dir: string; name: string }) => void) => e().on('project', fn),
+    project: (fn: (p: InitState['project']) => void) => e().on('project', fn),
     browserState: (fn: (s: BrowserState) => void) => e().on('browser:state', fn),
     browserPick: (fn: (p: BrowserPick | null) => void) => e().on('browser:pick', fn),
     agentEvent: (fn: (ev: AgentEvent) => void) => e().on('agent:event', fn),

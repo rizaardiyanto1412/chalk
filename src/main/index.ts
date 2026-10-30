@@ -76,7 +76,7 @@ function openProject(dir: string): void {
   updateConfig({ projectDir: dir, projects: config.projects.includes(dir) ? config.projects : [...config.projects, dir] })
   agent?.reset()
   win?.setTitle(`${basename(dir)} · Chalk`)
-  send('project', { dir, name: basename(dir) })
+  send('project', { dir, name: basename(dir), epoch: store.projectEpoch })
   send('tabs', tabs())
 }
 
@@ -247,7 +247,7 @@ function handle(channel: string, fn: (e: Electron.IpcMainInvokeEvent, ...args: a
 function registerIpc(): void {
   handle('init', () => ({
     doc: store.doc,
-    project: { dir: store.dir, name: basename(store.dir) },
+    project: { dir: store.dir, name: basename(store.dir), epoch: store.projectEpoch },
     port,
     mcpUrl: mcpUrl(),
     claudePath: findClaude(),
