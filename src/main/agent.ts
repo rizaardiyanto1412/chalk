@@ -93,7 +93,7 @@ export class Agent extends EventEmitter {
           settingSources: [],
           mcpServers: { easel: { type: 'http', url: this.mcpUrl() } },
           allowedTools: [...TOOL_NAMES.map((n) => `mcp__easel__${n}`), 'WebFetch', 'WebSearch'],
-          disallowedTools: ['Bash', 'Write', 'Edit', 'NotebookEdit', 'Task', 'Agent'],
+          disallowedTools: ['Bash', 'Write', 'Edit', 'NotebookEdit', 'Task', 'Agent', 'Skill'],
           permissionMode: 'dontAsk',
           abortController: this.abort,
           env: { ...process.env, PATH: `${process.env.PATH ?? ''}:/opt/homebrew/bin:/usr/local/bin:${homedir()}/.local/bin` }
@@ -104,7 +104,7 @@ export class Agent extends EventEmitter {
         else if (m.type === 'assistant' && !m.parent_tool_use_id) {
           for (const block of m.message.content) {
             if (block.type === 'text' && block.text.trim()) this.emitEvent({ type: 'text', text: block.text })
-            else if (block.type === 'tool_use') this.emitEvent({ type: 'tool', name: block.name.replace(/^mcp__easel__/, ''), summary: summarize(block.input) })
+            else if (block.type === 'tool_use' && block.name !== 'ToolSearch') this.emitEvent({ type: 'tool', name: block.name.replace(/^mcp__easel__/, ''), summary: summarize(block.input) })
           }
         } else if (m.type === 'result') {
           if (m.subtype !== 'success') this.emitEvent({ type: 'error', text: `Agent stopped: ${m.subtype}` })

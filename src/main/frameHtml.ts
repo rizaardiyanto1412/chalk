@@ -16,7 +16,7 @@ export function frameDocument(frame: Pick<HtmlFrame, 'name' | 'html'>, tailwindS
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..800&display=swap" rel="stylesheet">
 <script src="${tailwindSrc}"></script>
 <script src="${ICONIFY_CDN}"></script>
-<style>html,body{margin:0}body{font-family:Inter,ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}iconify-icon{display:inline-block;vertical-align:middle}</style>
+<style>html,body{margin:0}html{scrollbar-width:none}::-webkit-scrollbar{display:none}body{font-family:Inter,ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}iconify-icon{display:inline-block;vertical-align:middle}</style>
 </head>
 <body>
 ${frame.html}
