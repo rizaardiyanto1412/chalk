@@ -15,6 +15,7 @@ import type { ToolContext } from './tools'
 import { Agent, findClaude, MODELS } from './agent'
 import { frameDocument } from './frameHtml'
 import { buildExport, copyFrameImage, exportFileName, exportFormatSchema, snapshotExport, writeExport } from './export'
+import { loadStyle, styleChoiceSchema, styleSummaries } from './styles'
 import { z } from 'zod'
 
 const store = new Store()
@@ -253,6 +254,7 @@ function registerIpc(): void {
     mcpUrl: mcpUrl(),
     claudePath: findClaude(),
     models: MODELS,
+    styles: styleSummaries(),
     browser: browser.state(),
     recentUrls: config.recentUrls,
     tabs: tabs(),
@@ -308,9 +310,16 @@ function registerIpc(): void {
       }
     }
   })
-  handle('agent:send', (_e, { text, model }: { text: string; model: string }) => {
-    const selectedFrames = store.selection.flatMap((id) => findFrame(store.doc, id) ?? [])
-    void agent.send(text, { selectedFrames, browserPick: store.browserPick, browserUrl: browser.state().url }, model)
+  handle('agent:send', (_e, raw: unknown) => {
+    try {
+      const { text, model, style } = z.object({ text: z.string(), model: z.string(), style: styleChoiceSchema.nullish() }).strict().parse(raw)
+      const resolved = style ? loadStyle({ name: style.id, variant: style.variant }) : null
+      if (style && resolved?.id !== style.id) throw new Error('Style attachments require a canonical style ID from the catalog.')
+      const selectedFrames = store.selection.flatMap((id) => findFrame(store.doc, id) ?? [])
+      void agent.send(text, { selectedFrames, browserPick: store.browserPick, browserUrl: browser.state().url, style: resolved }, model)
+    } catch (error) {
+      send('agent:event', { type: 'error', text: `Invalid style or message: ${error instanceof Error ? error.message : String(error)}` })
+    }
   })
   handle('agent:stop', () => agent.stop())
   handle('agent:reset', () => agent.reset())

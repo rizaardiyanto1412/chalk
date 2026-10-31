@@ -12,11 +12,27 @@ The agent is instructed to view the selected reference before it designs. For an
 
 ## Choose a starting style
 
-Ask the agent to list the styles, choose one by name, or let it choose a direction for a new project. For example, "Design a coffee subscription landing page in the Field Notes style."
+Use **Style** beside the Chat input to choose a direction. Each option shows its original Chalk name and, where applicable, its direction name. Use the dependent **Variant** control for an alternate treatment. **Automatic** leaves the choice to the agent.
 
-The styles cover precise product UI, warm editorial layouts, dark developer products, product photography, dense data views, and expressive consumer products. Each returns composition and imagery guidance, fonts, semantic colors, and a Tailwind v4 theme snippet.
+The choice attaches to your next message. Sending, starting a new chat, or changing projects clears it. It is not a saved project preference and does not automatically restyle existing frames. Controls are disabled while the agent works.
 
-To inspect the presets through MCP, call `get_style` without arguments. Pass a listed name to load its full definition.
+Chalk includes 32 recipes. Six preserve the original presets. The other 26 cover editorial, technical, illustrated, product, graphic and photographic compositions with two curated variants each. These are original Chalk definitions, not imported templates or artwork. Variants replace complete palettes and change type, edge or elevation treatment. Imagery choices are local to each recipe. Omitting `imagery` uses the first listed mode; Chat uses that default. Use supplied or verified media, original diagrams, or explicit placeholders.
+
+Visual priority follows this order:
+
+1. Your current written instruction.
+2. Selected image or browser references.
+3. Project brand and `DESIGN.md`.
+4. The chosen style.
+5. The agent's own choice.
+
+A small edit preserves the existing direction unless you request a restyle.
+
+Through MCP, call `get_style()` for the compact catalog. Load an ID, Chalk display name or exact direction, for example `get_style({name: "Aerial Gravitas", variant: "atlas", imagery: "survey-lines"})`. The result includes composition, mobile behavior, supported font roles, semantic colors, font links and Tailwind v4 theme utilities. `name`, `variant` and `imagery` are the only accepted keys. Unknown fields, orphan choices and choices outside that recipe return errors.
+
+Place `fontLinks` and `theme` before the fragment and apply `font-sans` to its root. New recipes supply `text-display`, `py-section`, `px-gutter`, `rounded-control`, `rounded-panel`, `shadow-raised`, `font-caption` and `font-mono` alongside semantic color utilities. The six original recipes retain their exact earlier payloads and themes.
+
+The in-app agent receives the full resolved recipe in that turn's prompt. It does not have to infer the attachment from a name or request the recipe again. External MCP clients load the same registry through `get_style`.
 
 ## Save your project rules
 
@@ -46,3 +62,9 @@ Ask the agent to review the frame and repair the problems it finds. `review_fram
 The agent still needs to inspect the screenshot for typography, hierarchy, spacing, and visual balance. A report without layout findings does not establish that the design looks good or meets accessibility requirements.
 
 For Claude Code outside Chalk, use the same MCP tools. Call `get_canvas`, read the selected frame, and use its screenshot as the implementation reference. Existing design tokens and markup take precedence over choosing a new style.
+
+## Verify style delivery
+
+Run `npm run typecheck`, `npm run build`, then `npm run e2e`. The suite launches real Electron with temporary projects and a temporary profile. It checks the shared HTTP MCP catalog, frozen legacy payloads, 26 original composition fixtures at desktop and mobile sizes, alternate treatments, actual font loading and Chat prompt transport. Screenshots, computed measurements and a contact sheet go to the e2e artifact directory. Set `CHALK_E2E_ARTIFACTS` to choose that directory.
+
+`CHALK_CLAUDE_PATH` is an explicit local executable override. Tests point it at `scripts/fixtures/fake-claude.mjs`, which answers the SDK control protocol and records outgoing prompts through `CHALK_FAKE_LOG`. The tests never execute your Claude CLI or access credentials. The fake does not evaluate live AI design quality. Font network failures are reported as named skips, separately from loaded font-face assertions.

@@ -1,0 +1,224 @@
+[
+  {
+    "id": "studio-ledger",
+    "name": "Studio Ledger",
+    "uses": [
+      "Project tools",
+      "Professional services",
+      "Focused web apps"
+    ],
+    "composition": "A quiet navigation rail beside a broad working area. Give the active task most of the width. Use aligned text rows and restrained dividers instead of a wall of equal cards.",
+    "typography": {
+      "body": "Inter",
+      "display": "Manrope",
+      "displayFallback": "sans-serif",
+      "detail": "Manrope semibold titles at 28–40px; Inter 14px interface text with tabular numbers. Keep labels sentence case."
+    },
+    "colors": {
+      "canvas": "#F5F6F8",
+      "surface": "#FFFFFF",
+      "ink": "#18212E",
+      "muted": "#596575",
+      "accent": "#2458D3",
+      "onAccent": "#FFFFFF",
+      "line": "#DCE1E8"
+    },
+    "spacing": "4, 8, 12, 16, 24, 32, 48px. Keep related controls within 8px; separate working groups by 32px.",
+    "radius": "8px controls, 12px major panels.",
+    "density": "Balanced, with compact supporting navigation and a spacious primary task.",
+    "imagery": "Use actual product content, document thumbnails, and small user portraits. Data and working state provide the visual interest.",
+    "avoid": [
+      "Decorative dashboard metrics without a purpose",
+      "A card around every label",
+      "Competing primary buttons"
+    ],
+    "fontLinks": "<link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&display=swap\" rel=\"stylesheet\">",
+    "theme": "<style type=\"text/tailwindcss\">\n@theme {\n  --color-canvas: #F5F6F8;\n  --color-surface: #FFFFFF;\n  --color-ink: #18212E;\n  --color-muted: #596575;\n  --color-accent: #2458D3;\n  --color-on-accent: #FFFFFF;\n  --color-line: #DCE1E8;\n  --font-sans: \"Inter\", sans-serif;\n  --font-display: \"Manrope\", sans-serif;\n}\n</style>",
+    "usage": "Place fontLinks and theme at the top of the fragment. Put font-sans on the root element so the style body font replaces the shell default. Use bg-canvas, bg-surface, text-ink, text-muted, bg-accent, text-on-accent, border-line, and font-display. Keep these semantic tokens on related screens; adapt them to the user’s brand."
+  },
+  {
+    "id": "field-notes",
+    "name": "Field Notes",
+    "uses": [
+      "Editorial sites",
+      "Hospitality",
+      "Independent brands"
+    ],
+    "composition": "An asymmetric editorial grid with a narrow annotation column and a generous main story. Alternate a large photograph with typographic sections and fine rules.",
+    "typography": {
+      "body": "DM Sans",
+      "display": "Lora",
+      "displayFallback": "serif",
+      "detail": "Lora headlines at 48–72px with natural line breaks; DM Sans 16–18px body. Use short uppercase annotations sparingly."
+    },
+    "colors": {
+      "canvas": "#F5F1E8",
+      "surface": "#FFFCF6",
+      "ink": "#292D25",
+      "muted": "#62675B",
+      "accent": "#446344",
+      "onAccent": "#FFFFFF",
+      "line": "#D8D4C7"
+    },
+    "spacing": "8, 16, 24, 40, 64, 96px. Large spaces belong between stories; captions stay near their images.",
+    "radius": "2px controls and photographs; preserve the printed-page character.",
+    "density": "Airy stories with concise, closely grouped annotations.",
+    "imagery": "Natural-light photography with visible material texture and a deliberate crop. Use a real supplied or verified image URL; reserve a clear text region.",
+    "avoid": [
+      "Faux paper textures behind body copy",
+      "Centering every section",
+      "A repeated three-card feature grid"
+    ],
+    "fontLinks": "<link href=\"https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Lora:wght@400;500;600;700&display=swap\" rel=\"stylesheet\">",
+    "theme": "<style type=\"text/tailwindcss\">\n@theme {\n  --color-canvas: #F5F1E8;\n  --color-surface: #FFFCF6;\n  --color-ink: #292D25;\n  --color-muted: #62675B;\n  --color-accent: #446344;\n  --color-on-accent: #FFFFFF;\n  --color-line: #D8D4C7;\n  --font-sans: \"DM Sans\", sans-serif;\n  --font-display: \"Lora\", serif;\n}\n</style>",
+    "usage": "Place fontLinks and theme at the top of the fragment. Put font-sans on the root element so the style body font replaces the shell default. Use bg-canvas, bg-surface, text-ink, text-muted, bg-accent, text-on-accent, border-line, and font-display. Keep these semantic tokens on related screens; adapt them to the user’s brand."
+  },
+  {
+    "id": "night-signal",
+    "name": "Night Signal",
+    "uses": [
+      "Developer products",
+      "Technical landing pages",
+      "Monitoring tools"
+    ],
+    "composition": "A strong left reading axis, one large working demonstration, and a narrow band of operational evidence. Use darkness to group content; use the accent to identify the current action.",
+    "typography": {
+      "body": "Inter",
+      "display": "Space Grotesk",
+      "displayFallback": "sans-serif",
+      "detail": "Space Grotesk headlines at 40–64px. Inter 14–16px body. Use the system monospace stack only for real code, identifiers, and readings."
+    },
+    "colors": {
+      "canvas": "#101419",
+      "surface": "#191F27",
+      "ink": "#EEF3F8",
+      "muted": "#A5B2C2",
+      "accent": "#A9E55E",
+      "onAccent": "#142008",
+      "line": "#343F4D"
+    },
+    "spacing": "4, 8, 12, 16, 24, 40, 64, 96px. Keep code aligned and distinguish section spacing from line spacing.",
+    "radius": "6px controls, 10px demonstrations.",
+    "density": "Dense real demonstrations inside a spacious overall composition.",
+    "imagery": "Use legible code, real command output, or an authentic product view. Show one complete useful task instead of an abstract glowing object.",
+    "avoid": [
+      "Low-contrast gray text",
+      "Neon glows on every border",
+      "Fake code and meaningless log streams"
+    ],
+    "fontLinks": "<link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap\" rel=\"stylesheet\">",
+    "theme": "<style type=\"text/tailwindcss\">\n@theme {\n  --color-canvas: #101419;\n  --color-surface: #191F27;\n  --color-ink: #EEF3F8;\n  --color-muted: #A5B2C2;\n  --color-accent: #A9E55E;\n  --color-on-accent: #142008;\n  --color-line: #343F4D;\n  --font-sans: \"Inter\", sans-serif;\n  --font-display: \"Space Grotesk\", sans-serif;\n}\n</style>",
+    "usage": "Place fontLinks and theme at the top of the fragment. Put font-sans on the root element so the style body font replaces the shell default. Use bg-canvas, bg-surface, text-ink, text-muted, bg-accent, text-on-accent, border-line, and font-display. Keep these semantic tokens on related screens; adapt them to the user’s brand."
+  },
+  {
+    "id": "gallery-commerce",
+    "name": "Gallery Commerce",
+    "uses": [
+      "Product collections",
+      "Furniture",
+      "Fashion and retail"
+    ],
+    "composition": "Let a large product photograph establish the first view. Put the purchase details on a clear adjacent axis. Use a measured gallery rhythm with visible product names and prices.",
+    "typography": {
+      "body": "DM Sans",
+      "display": "Bodoni Moda",
+      "displayFallback": "serif",
+      "detail": "Bodoni Moda headlines at 48–72px; DM Sans 14–16px details and controls. Keep product names concise and prices easy to scan."
+    },
+    "colors": {
+      "canvas": "#FAF8F4",
+      "surface": "#FFFFFF",
+      "ink": "#26211E",
+      "muted": "#70665E",
+      "accent": "#8F3E2C",
+      "onAccent": "#FFFFFF",
+      "line": "#DED6CE"
+    },
+    "spacing": "8, 16, 24, 32, 48, 80px. Product detail groups stay close; gallery images receive generous outer space.",
+    "radius": "0px images and gallery panels; 4px controls.",
+    "density": "Image-led, with compact factual purchase information.",
+    "imagery": "Use consistent product photography with honest proportions and crops. Include material or scale detail only when it helps someone choose.",
+    "avoid": [
+      "Decorative price badges",
+      "Text over a busy product image",
+      "Different photo treatments in one collection"
+    ],
+    "fontLinks": "<link href=\"https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Bodoni+Moda:wght@400;500;600;700&display=swap\" rel=\"stylesheet\">",
+    "theme": "<style type=\"text/tailwindcss\">\n@theme {\n  --color-canvas: #FAF8F4;\n  --color-surface: #FFFFFF;\n  --color-ink: #26211E;\n  --color-muted: #70665E;\n  --color-accent: #8F3E2C;\n  --color-on-accent: #FFFFFF;\n  --color-line: #DED6CE;\n  --font-sans: \"DM Sans\", sans-serif;\n  --font-display: \"Bodoni Moda\", serif;\n}\n</style>",
+    "usage": "Place fontLinks and theme at the top of the fragment. Put font-sans on the root element so the style body font replaces the shell default. Use bg-canvas, bg-surface, text-ink, text-muted, bg-accent, text-on-accent, border-line, and font-display. Keep these semantic tokens on related screens; adapt them to the user’s brand."
+  },
+  {
+    "id": "civic-grid",
+    "name": "Civic Grid",
+    "uses": [
+      "Analytics",
+      "Operations dashboards",
+      "Public information"
+    ],
+    "composition": "Use a single dominant table, map, or chart. A compact summary strip introduces it, and filters remain attached to the data they affect. Align numeric columns and share a baseline.",
+    "typography": {
+      "body": "Public Sans",
+      "display": "Public Sans",
+      "displayFallback": "sans-serif",
+      "detail": "Public Sans 14px data rows, 12px supporting labels, and 24–32px section titles. Use tabular numbers and readable units."
+    },
+    "colors": {
+      "canvas": "#EDF2F3",
+      "surface": "#FFFFFF",
+      "ink": "#162E36",
+      "muted": "#536971",
+      "accent": "#006A78",
+      "onAccent": "#FFFFFF",
+      "line": "#CAD8DC"
+    },
+    "spacing": "4, 8, 12, 16, 24, 32px. Use 40–48px rows for dense desktop tables and preserve aligned column gutters.",
+    "radius": "4px controls and 6px grouped panels.",
+    "density": "Compact, with strong grouping and room around filters.",
+    "imagery": "Prefer honest charts with units, scales, date ranges, and meaningful labels. Photos rarely help an operational screen.",
+    "avoid": [
+      "A separate card per statistic",
+      "Unlabelled charts",
+      "Using red and green as the only status cues"
+    ],
+    "fontLinks": "<link href=\"https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap\" rel=\"stylesheet\">",
+    "theme": "<style type=\"text/tailwindcss\">\n@theme {\n  --color-canvas: #EDF2F3;\n  --color-surface: #FFFFFF;\n  --color-ink: #162E36;\n  --color-muted: #536971;\n  --color-accent: #006A78;\n  --color-on-accent: #FFFFFF;\n  --color-line: #CAD8DC;\n  --font-sans: \"Public Sans\", sans-serif;\n  --font-display: \"Public Sans\", sans-serif;\n}\n</style>",
+    "usage": "Place fontLinks and theme at the top of the fragment. Put font-sans on the root element so the style body font replaces the shell default. Use bg-canvas, bg-surface, text-ink, text-muted, bg-accent, text-on-accent, border-line, and font-display. Keep these semantic tokens on related screens; adapt them to the user’s brand."
+  },
+  {
+    "id": "playroom",
+    "name": "Playroom",
+    "uses": [
+      "Creative learning",
+      "Community products",
+      "Friendly consumer apps"
+    ],
+    "composition": "Use a generous type-led introduction, one expressive activity area, and a simple next action. Allow one playful offset or shape, while text and controls stay aligned.",
+    "typography": {
+      "body": "Nunito Sans",
+      "display": "Bricolage Grotesque",
+      "displayFallback": "sans-serif",
+      "detail": "Bricolage Grotesque bold headlines at 40–64px; Nunito Sans 16px body. Keep headings short so their shapes stay deliberate."
+    },
+    "colors": {
+      "canvas": "#FFF8EB",
+      "surface": "#FFFFFF",
+      "ink": "#292536",
+      "muted": "#655C74",
+      "accent": "#9D3431",
+      "onAccent": "#FFFFFF",
+      "line": "#E4D6C5"
+    },
+    "spacing": "8, 12, 16, 24, 32, 48, 72px. Leave room around the primary activity; group instructional text tightly.",
+    "radius": "12px controls and 24px activity panels. Use the same family across screens.",
+    "density": "Comfortable, with large controls and short instructions.",
+    "imagery": "Use supplied illustrations or real participant work when available. A small set of simple geometric accents is enough without custom artwork.",
+    "avoid": [
+      "Childish decoration on every component",
+      "Emoji used as navigation icons",
+      "Low-contrast pastel labels"
+    ],
+    "fontLinks": "<link href=\"https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;500;600;700&family=Bricolage+Grotesque:wght@400;500;600;700&display=swap\" rel=\"stylesheet\">",
+    "theme": "<style type=\"text/tailwindcss\">\n@theme {\n  --color-canvas: #FFF8EB;\n  --color-surface: #FFFFFF;\n  --color-ink: #292536;\n  --color-muted: #655C74;\n  --color-accent: #9D3431;\n  --color-on-accent: #FFFFFF;\n  --color-line: #E4D6C5;\n  --font-sans: \"Nunito Sans\", sans-serif;\n  --font-display: \"Bricolage Grotesque\", sans-serif;\n}\n</style>",
+    "usage": "Place fontLinks and theme at the top of the fragment. Put font-sans on the root element so the style body font replaces the shell default. Use bg-canvas, bg-surface, text-ink, text-muted, bg-accent, text-on-accent, border-line, and font-display. Keep these semantic tokens on related screens; adapt them to the user’s brand."
+  }
+]

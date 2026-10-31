@@ -1,3 +1,4 @@
+import type { StyleSummary } from '../../shared/styles'
 import { useEffect, useRef, useState } from 'react'
 import type { AgentEvent, AgentStatus, BrowserPick, Frame } from '../../shared/model'
 import { api } from './api'
@@ -30,6 +31,8 @@ const TOOL_LABELS: Record<string, string> = {
 }
 
 interface Props {
+  projectEpoch: number
+  styles: StyleSummary[]
   events: AgentEvent[]
   status: AgentStatus
   models: readonly { id: string; label: string }[]
@@ -49,12 +52,21 @@ const SUGGESTIONS = [
   'Recipe detail page for a cooking magazine'
 ]
 
-export function Chat({ events, status, models, claudePath, selectedFrames, pick, onClearSelection, onNewChat }: Props) {
+export function Chat({ projectEpoch, styles, events, status, models, claudePath, selectedFrames, pick, onClearSelection, onNewChat }: Props) {
+  const [styleId, setStyleId] = useState('')
+  const [variant, setVariant] = useState('')
+  const chosen = styles.find(s => s.id === styleId)
+  const clearStyle = () => { setStyleId(''); setVariant('') }
   const [text, setText] = useState('')
   const [model, setModel] = useState(() => localStorage.getItem('chalk.model') ?? '')
   const list = useRef<HTMLDivElement>(null)
   const box = useRef<HTMLTextAreaElement>(null)
   const running = status === 'running'
+
+  useEffect(() => {
+    setStyleId('')
+    setVariant('')
+  }, [projectEpoch])
 
   useEffect(() => {
     list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' })
@@ -68,15 +80,16 @@ export function Chat({ events, status, models, claudePath, selectedFrames, pick,
 
   const send = (t: string) => {
     if (!t.trim() || running) return
-    void api.sendAgent(t.trim(), model)
+    void api.sendAgent(t.trim(), model, chosen ? { id: chosen.id, variant } : null)
     setText('')
+    clearStyle()
   }
 
   return (
     <div className="chat">
       <div className="chat-head">
         <span className="chat-session">{events.find((e) => e.type === 'user')?.type === 'user' ? (events.find((e) => e.type === 'user') as { text: string }).text.slice(0, 48) : 'New chat'}</span>
-        <button className="chat-new" onClick={onNewChat} disabled={running}><Icon name="plus" size={13} /> New</button>
+        <button className="chat-new" onClick={() => { clearStyle(); onNewChat() }} disabled={running}><Icon name="plus" size={13} /> New</button>
       </div>
 
       <div className="messages" ref={list}>
@@ -119,6 +132,15 @@ export function Chat({ events, status, models, claudePath, selectedFrames, pick,
             {selectedFrames.length > 0 && <button className="chip-clear" onClick={onClearSelection}>Clear</button>}
           </div>
         )}
+        <div className="style-controls">
+          <label>Style<select aria-label="Style" value={styleId} disabled={running} onChange={e => {
+            const next = styles.find(s => s.id === e.target.value)
+            setStyleId(next?.id ?? '')
+            setVariant(next?.variants[0].id ?? '')
+          }}><option value="">Automatic</option>{styles.map(s => <option key={s.id} value={s.id}>{s.name}{s.direction ? ` · ${s.direction}` : ''}</option>)}</select></label>
+          {chosen && chosen.variants.length > 1 && <label>Variant<select aria-label="Variant" value={variant} disabled={running} onChange={e => setVariant(e.target.value)}>{chosen.variants.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select></label>}
+          <span>References and brand take priority</span>
+        </div>
         <div className="input-box">
           <textarea
             ref={box}

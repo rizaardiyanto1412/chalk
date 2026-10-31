@@ -171,6 +171,8 @@ export function App() {
               <div className="left-body">
                 <div style={{ display: leftTab === 'agent' ? 'contents' : 'none' }}>
                   <Chat
+                    projectEpoch={project.epoch}
+                    styles={init.styles}
                     events={events}
                     status={status}
                     models={init.models}

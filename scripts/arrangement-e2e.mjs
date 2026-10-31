@@ -260,7 +260,7 @@ export async function checkArrangement({ app, win, client, call, json, check, pr
       await textarea.fill('native text')
       await textarea.press('ArrowLeft')
       await textarea.press('Shift+ArrowLeft')
-      await win.locator('.chat select').focus()
+      await win.locator('.chat select[title="Claude model"]').focus()
       await win.keyboard.press('ArrowDown')
       await win.evaluate(() => {
         const el = document.createElement('div')

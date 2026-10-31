@@ -7,8 +7,9 @@ import type { Store } from './store'
 import type { Browser } from './browser'
 import { renderUrl } from './render'
 import { frameDocument } from './frameHtml'
-import { DESIGN_GUIDE } from './prompt'
-import { getStyle, projectDesignNotes, SCREEN_GUIDES, screenTypeSchema } from './design'
+import { resolveStyle, styleInputSchema } from './styles'
+import { DESIGN_GUIDE, STYLE_PRECEDENCE } from './prompt'
+import { projectDesignNotes, SCREEN_GUIDES, screenTypeSchema } from './design'
 import { buildExport, copyFrameImage, exportFormatSchema, snapshotExport, writeProjectExport } from './export'
 
 export type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
@@ -230,10 +231,10 @@ export const TOOLS: Tool[] = [
   }),
   tool({
     name: 'get_style',
-    description: 'List original Chalk visual styles, or load one by name/id for its composition, typography, semantic color tokens, Tailwind v4 theme, font links, spacing, imagery, and avoid list. Use when a new design has no user-provided visual direction. Preserve existing brand and selected references before choosing a preset.',
-    input: { name: z.string().optional() },
+    description: 'List 32 original Chalk recipes or load by id, Chalk name or exact direction. Only name, variant and imagery are accepted. Load composition, supported fonts, semantic Tailwind tokens, responsive sizes and curated choices. ' + STYLE_PRECEDENCE,
+    input: styleInputSchema.shape,
     readOnly: true,
-    run: async ({ name }) => [text(getStyle(name))]
+    run: async (args) => [text(resolveStyle(args))]
   }),
   tool({
     name: 'get_design_guidelines',

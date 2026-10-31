@@ -4,11 +4,13 @@ import { execFileSync } from 'node:child_process'
 import { homedir } from 'node:os'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentEvent, AgentStatus, BrowserPick, Frame } from '../shared/model'
-import { AGENT_SYSTEM } from './prompt'
+import type { ResolvedStyle } from './styles'
+import { AGENT_SYSTEM, STYLE_PRECEDENCE } from './prompt'
 import { TOOL_NAMES } from './tools'
 
 /** Find the user's own Claude Code CLI. A packaged app starts with a minimal PATH, so check known spots first. */
 export function findClaude(): string | null {
+  if (process.env.CHALK_CLAUDE_PATH) return process.env.CHALK_CLAUDE_PATH
   const candidates = [`${homedir()}/.local/bin/claude`, '/opt/homebrew/bin/claude', '/usr/local/bin/claude', `${homedir()}/.claude/local/claude`]
   const hit = candidates.find((p) => existsSync(p))
   if (hit) return hit
@@ -23,6 +25,7 @@ export interface TurnContext {
   selectedFrames: Frame[]
   browserPick: BrowserPick | null
   browserUrl: string
+  style: ResolvedStyle | null
 }
 
 /** Pure: the context block the agent sees ahead of the user's words. */
@@ -36,6 +39,7 @@ export function contextBlock(c: TurnContext): string {
     const p = c.browserPick
     lines.push(`The user picked this element in the browser (${p.url}): <${p.tag}> at ${p.selector}, ${Math.round(p.rect.width)}×${Math.round(p.rect.height)}px. Text: "${p.text.slice(0, 200)}". HTML (trimmed):\n${p.outerHTML.slice(0, 2000)}`)
   }
+  if (c.style) lines.push(`${STYLE_PRECEDENCE}\n<chosen-style>\n${JSON.stringify(c.style)}\n</chosen-style>`)
   return lines.length ? `<context>\n${lines.join('\n')}\n</context>\n\n` : ''
 }
 

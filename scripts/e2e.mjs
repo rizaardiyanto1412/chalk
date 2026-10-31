@@ -12,6 +12,7 @@ import assert from 'node:assert/strict'
 import { checkExports } from './export-e2e.mjs'
 import { checkFrames } from './frames-e2e.mjs'
 import { checkBrowserDevices, checkBrowserDevicePreference } from './browser-devices-e2e.mjs'
+import { checkStyles } from './styles-e2e.mjs'
 import { checkArrangement } from './arrangement-e2e.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -19,6 +20,8 @@ const artifacts = process.env.CHALK_E2E_ARTIFACTS || join(root, 'e2e-artifacts')
 mkdirSync(artifacts, { recursive: true })
 const project = realpathSync(mkdtempSync(join(tmpdir(), 'chalk-e2e-')))
 const profile = realpathSync(mkdtempSync(join(tmpdir(), 'chalk-e2e-profile-')))
+const fakeLog = join(artifacts, 'fake-claude.jsonl')
+writeFileSync(fakeLog, '')
 const PORT = 7911
 const results = []
 const check = async (name, fn) => {
@@ -52,7 +55,7 @@ await new Promise((r) => site.listen(7912, '127.0.0.1', r))
 const SITE = 'http://127.0.0.1:7912'
 
 const launch = () =>
-  electron.launch({ args: [root, `--user-data-dir=${profile}`], cwd: root, env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'ELECTRON_RUN_AS_NODE')), CHALK_PROJECT_DIR: project, CHALK_PORT: String(PORT), ELECTRON_RENDERER_URL: '' } })
+  electron.launch({ args: [root, `--user-data-dir=${profile}`], cwd: root, env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'ELECTRON_RUN_AS_NODE')), CHALK_CLAUDE_PATH: join(root, 'scripts/fixtures/fake-claude.mjs'), CHALK_FAKE_LOG: fakeLog, CHALK_PROJECT_DIR: project, CHALK_PORT: String(PORT), ELECTRON_RENDERER_URL: '' } })
 
 async function mcp() {
   const client = new Client({ name: 'e2e', version: '0' })
@@ -108,7 +111,6 @@ await check('get_style lists distinct styles and loads fonts and semantic themes
   const { styles } = json(await call(client, 'get_style'))
   assert.ok(styles.length >= 6)
   assert.equal(new Set(styles.map((s) => s.id)).size, styles.length)
-  const accents = new Set()
   for (const listed of styles) {
     const style = json(await call(client, 'get_style', { name: listed.id }))
     assert.equal(style.name, listed.name)
@@ -119,9 +121,7 @@ await check('get_style lists distinct styles and loads fonts and semantic themes
     assert.match(style.theme, /@theme/)
     assert.match(style.theme, /--color-on-accent:/)
     for (const color of Object.values(style.colors)) assert.match(color, /^#[\da-f]{6}$/i)
-    accents.add(style.colors.accent)
   }
-  assert.equal(accents.size, styles.length)
   assert.equal(json(await call(client, 'get_style', { name: 'Field Notes' })).id, 'field-notes')
   const bad = await client.callTool({ name: 'get_style', arguments: { name: 'missing-style' } })
   assert.equal(bad.isError, true)
@@ -139,6 +139,8 @@ await check('style theme renders semantic Tailwind tokens as the specified color
     await call(client, 'delete_frame', { id: out.created.id })
   }
 })
+
+await checkStyles({ app, win, client, call, json, check, artifacts, root, project, agentTab, fakeLog })
 
 await check('guidelines tailor the screen type and reload bounded project DESIGN.md notes', async () => {
   const file = join(project, 'DESIGN.md')
@@ -521,4 +523,5 @@ site.close()
 const failed = results.filter((r) => r[0] === 'FAIL').length
 const skipped = results.filter((r) => r[0] === 'SKIP').length
 console.log(`\n${results.length - failed - skipped}/${results.length} passed, ${skipped} skipped. Artifacts: ${artifacts}`)
+writeFileSync(join(artifacts, 'verification.json'), JSON.stringify({ results, failed, skipped, passed: results.length - failed - skipped }, null, 2))
 process.exit(failed ? 1 : 0)

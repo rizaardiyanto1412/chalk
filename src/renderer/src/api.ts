@@ -1,3 +1,4 @@
+import type { StyleChoice, StyleSummary } from '../../shared/styles'
 import type { ChalkApi } from '../../preload'
 import type { AgentEvent, AgentStatus, BrowserPick, BrowserState, CopyImageResult, Doc, ExportActivity, ExportFormat, ExportResult, EditCommand, FrameCommand, NativeEditCommand, FrameId, Op } from '../../shared/model'
 
@@ -15,6 +16,7 @@ export interface InitState {
   port: number
   mcpUrl: string
   claudePath: string | null
+  styles: StyleSummary[]
   models: readonly { id: string; label: string }[]
   browser: BrowserState
   recentUrls: string[]
@@ -39,7 +41,7 @@ export const api = {
   history: (direction: 'undo' | 'redo') => e().invoke('history', direction),
   select: (ids: FrameId[]) => e().invoke('select', ids),
   browser: (action: string, arg?: unknown) => e().invoke('browser', action, arg),
-  sendAgent: (text: string, model: string) => e().invoke('agent:send', { text, model }),
+  sendAgent: (text: string, model: string, style: StyleChoice | null) => e().invoke('agent:send', { text, model, style }),
   stopAgent: () => e().invoke('agent:stop'),
   resetAgent: () => e().invoke('agent:reset'),
   frame: (action: 'copy' | 'open', id: string) => e().invoke('frame', action, id),

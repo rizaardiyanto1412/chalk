@@ -1,0 +1,803 @@
+{
+  "terrain-register": {
+    "desktop": [
+      {
+        "kind": "right",
+        "a": "ledger",
+        "b": "stage",
+        "ratio": 0
+      },
+      {
+        "kind": "wider",
+        "a": "stage",
+        "b": "ledger",
+        "ratio": 1.8
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "ledger",
+        "b": "stage"
+      }
+    ]
+  },
+  "current-index": {
+    "desktop": [
+      {
+        "kind": "right",
+        "a": "anchor",
+        "b": "stage",
+        "ratio": 0
+      },
+      {
+        "kind": "wider",
+        "a": "stage",
+        "b": "anchor",
+        "ratio": 1.8
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "anchor",
+        "b": "stage"
+      }
+    ]
+  },
+  "workshop-journal": {
+    "desktop": [
+      {
+        "kind": "right",
+        "a": "notes",
+        "b": "stage",
+        "ratio": 0
+      },
+      {
+        "kind": "below",
+        "a": "prose",
+        "b": "stage"
+      },
+      {
+        "kind": "below",
+        "a": "process",
+        "b": "prose"
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "notes",
+        "b": "stage"
+      },
+      {
+        "kind": "below",
+        "a": "prose",
+        "b": "notes"
+      },
+      {
+        "kind": "below",
+        "a": "process",
+        "b": "prose"
+      }
+    ]
+  },
+  "assembly-sheet": {
+    "desktop": [
+      {
+        "kind": "right",
+        "a": "properties",
+        "b": "stage",
+        "ratio": 0
+      },
+      {
+        "kind": "wider",
+        "a": "stage",
+        "b": "properties",
+        "ratio": 2.5
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "properties",
+        "b": "stage"
+      }
+    ]
+  },
+  "screen-relay": {
+    "desktop": [
+      {
+        "kind": "wider",
+        "a": "active",
+        "b": "before",
+        "ratio": 1.7
+      },
+      {
+        "kind": "right",
+        "a": "after",
+        "b": "active",
+        "ratio": 0
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "before",
+        "b": "active"
+      },
+      {
+        "kind": "below",
+        "a": "after",
+        "b": "before"
+      }
+    ]
+  },
+  "folio-directory": {
+    "desktop": [
+      {
+        "kind": "below",
+        "a": "first",
+        "b": "intro"
+      },
+      {
+        "kind": "below",
+        "a": "second",
+        "b": "first"
+      },
+      {
+        "kind": "right",
+        "a": "entry-detail",
+        "b": "entry-title"
+      },
+      {
+        "kind": "right",
+        "a": "entry-action",
+        "b": "entry-detail"
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "second",
+        "b": "first"
+      },
+      {
+        "kind": "below",
+        "a": "entry-detail",
+        "b": "entry-title"
+      },
+      {
+        "kind": "below",
+        "a": "entry-action",
+        "b": "entry-detail"
+      }
+    ]
+  },
+  "scene-sequence": {
+    "desktop": [
+      {
+        "kind": "below",
+        "a": "story",
+        "b": "scene"
+      },
+      {
+        "kind": "below",
+        "a": "second-story",
+        "b": "story"
+      },
+      {
+        "kind": "below",
+        "a": "evidence",
+        "b": "second-story"
+      },
+      {
+        "kind": "right",
+        "a": "interval",
+        "b": "story"
+      },
+      {
+        "kind": "right",
+        "a": "second-scene",
+        "b": "second-copy"
+      },
+      {
+        "kind": "wider",
+        "a": "second-scene",
+        "b": "second-copy",
+        "ratio": 1.8
+      },
+      {
+        "kind": "wider",
+        "a": "story",
+        "b": "interval",
+        "ratio": 1.8
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "second-story",
+        "b": "story"
+      },
+      {
+        "kind": "below",
+        "a": "evidence",
+        "b": "second-story"
+      },
+      {
+        "kind": "below",
+        "a": "interval",
+        "b": "story"
+      },
+      {
+        "kind": "below",
+        "a": "second-scene",
+        "b": "second-copy"
+      }
+    ]
+  },
+  "portrait-console": {
+    "desktop": [
+      {
+        "kind": "right",
+        "a": "copy",
+        "b": "device",
+        "ratio": 0
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "copy",
+        "b": "device"
+      },
+      {
+        "kind": "below",
+        "a": "environment",
+        "b": "copy"
+      }
+    ]
+  },
+  "signal-press": {
+    "desktop": [
+      {
+        "kind": "below",
+        "a": "proof",
+        "b": "proposition"
+      },
+      {
+        "kind": "below",
+        "a": "action",
+        "b": "proof"
+      },
+      {
+        "kind": "taller",
+        "a": "proof",
+        "b": "proposition",
+        "ratio": 1.8
+      },
+      {
+        "kind": "taller",
+        "a": "proof",
+        "b": "action",
+        "ratio": 1.5
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "action",
+        "b": "proof"
+      }
+    ]
+  },
+  "control-orbit": {
+    "desktop": [
+      {
+        "kind": "center",
+        "a": "stage"
+      },
+      {
+        "kind": "below",
+        "a": "stage",
+        "b": "modes"
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "evidence",
+        "b": "stage"
+      }
+    ]
+  },
+  "horizon-log": {
+    "desktop": [
+      {
+        "kind": "right",
+        "a": "reading",
+        "b": "location",
+        "ratio": 0
+      },
+      {
+        "kind": "below",
+        "a": "location",
+        "b": "plate"
+      },
+      {
+        "kind": "below",
+        "a": "second-plate",
+        "b": "reading"
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "location",
+        "b": "plate"
+      },
+      {
+        "kind": "below",
+        "a": "reading",
+        "b": "location"
+      },
+      {
+        "kind": "below",
+        "a": "second-plate",
+        "b": "reading"
+      }
+    ]
+  },
+  "specimen-review": {
+    "desktop": [
+      {
+        "kind": "right",
+        "a": "legend",
+        "b": "stage",
+        "ratio": 0
+      },
+      {
+        "kind": "below",
+        "a": "observations",
+        "b": "stage"
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "legend",
+        "b": "stage"
+      },
+      {
+        "kind": "below",
+        "a": "observations",
+        "b": "legend"
+      }
+    ]
+  },
+  "query-workbench": {
+    "desktop": [
+      {
+        "kind": "below",
+        "a": "response",
+        "b": "input"
+      },
+      {
+        "kind": "below",
+        "a": "result",
+        "b": "response"
+      },
+      {
+        "kind": "right",
+        "a": "submit",
+        "b": "prompt-field"
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "result",
+        "b": "response"
+      },
+      {
+        "kind": "below",
+        "a": "submit",
+        "b": "prompt-field"
+      }
+    ]
+  },
+  "story-path": {
+    "desktop": [
+      {
+        "kind": "below",
+        "a": "meet",
+        "b": "notice"
+      },
+      {
+        "kind": "wider",
+        "a": "notice",
+        "b": "meet",
+        "ratio": 1.1
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "meet",
+        "b": "notice"
+      },
+      {
+        "kind": "below",
+        "a": "make",
+        "b": "meet"
+      }
+    ]
+  },
+  "neighborhood-table": {
+    "desktop": [
+      {
+        "kind": "below",
+        "a": "host",
+        "b": "activity"
+      },
+      {
+        "kind": "right",
+        "a": "story",
+        "b": "host",
+        "ratio": 0
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "host",
+        "b": "activity"
+      },
+      {
+        "kind": "below",
+        "a": "story",
+        "b": "host"
+      }
+    ]
+  },
+  "margin-greeting": {
+    "desktop": [
+      {
+        "kind": "below",
+        "a": "facts",
+        "b": "sentence"
+      },
+      {
+        "kind": "below",
+        "a": "portrait",
+        "b": "facts"
+      },
+      {
+        "kind": "right",
+        "a": "team",
+        "b": "location"
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "portrait",
+        "b": "facts"
+      },
+      {
+        "kind": "below",
+        "a": "team",
+        "b": "location"
+      }
+    ]
+  },
+  "module-exhibit": {
+    "desktop": [
+      {
+        "kind": "right",
+        "a": "explain",
+        "b": "work",
+        "ratio": 0
+      },
+      {
+        "kind": "wider",
+        "a": "work",
+        "b": "explain",
+        "ratio": 1.8
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "explain",
+        "b": "work"
+      },
+      {
+        "kind": "below",
+        "a": "evidence-a",
+        "b": "explain"
+      },
+      {
+        "kind": "below",
+        "a": "evidence-b",
+        "b": "evidence-a"
+      }
+    ]
+  },
+  "large-type-review": {
+    "desktop": [
+      {
+        "kind": "right",
+        "a": "photo",
+        "b": "statement",
+        "ratio": 0
+      },
+      {
+        "kind": "below",
+        "a": "reading",
+        "b": "statement"
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "photo",
+        "b": "statement"
+      },
+      {
+        "kind": "below",
+        "a": "reading",
+        "b": "photo"
+      }
+    ]
+  },
+  "chapter-garden": {
+    "desktop": [
+      {
+        "kind": "right",
+        "a": "passage",
+        "b": "route",
+        "ratio": 0
+      },
+      {
+        "kind": "below",
+        "a": "route",
+        "b": "scene"
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "right",
+        "a": "passage",
+        "b": "route",
+        "ratio": 0
+      },
+      {
+        "kind": "below",
+        "a": "passage",
+        "b": "scene"
+      }
+    ]
+  },
+  "object-specification": {
+    "desktop": [
+      {
+        "kind": "right",
+        "a": "specs",
+        "b": "stage",
+        "ratio": 0
+      },
+      {
+        "kind": "below",
+        "a": "comparison",
+        "b": "stage"
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "specs",
+        "b": "stage"
+      },
+      {
+        "kind": "below",
+        "a": "comparison",
+        "b": "specs"
+      }
+    ]
+  },
+  "task-theater": {
+    "desktop": [
+      {
+        "kind": "right",
+        "a": "demo",
+        "b": "input",
+        "ratio": 0
+      },
+      {
+        "kind": "wider",
+        "a": "demo",
+        "b": "input",
+        "ratio": 1.8
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "demo",
+        "b": "input"
+      },
+      {
+        "kind": "below",
+        "a": "result",
+        "b": "demo"
+      }
+    ]
+  },
+  "code-crossing": {
+    "desktop": [
+      {
+        "kind": "right",
+        "a": "result",
+        "b": "code",
+        "ratio": 0
+      },
+      {
+        "kind": "wider",
+        "a": "code",
+        "b": "result",
+        "ratio": 1.3
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "result",
+        "b": "code"
+      },
+      {
+        "kind": "below",
+        "a": "ledger",
+        "b": "result"
+      }
+    ]
+  },
+  "cushion-desk": {
+    "desktop": [
+      {
+        "kind": "right",
+        "a": "support",
+        "b": "task",
+        "ratio": 0
+      },
+      {
+        "kind": "wider",
+        "a": "task",
+        "b": "support",
+        "ratio": 1.8
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "support",
+        "b": "task"
+      }
+    ]
+  },
+  "crosspoint-atlas": {
+    "desktop": [
+      {
+        "kind": "right",
+        "a": "portrait",
+        "b": "index",
+        "ratio": 0
+      },
+      {
+        "kind": "wider",
+        "a": "portrait",
+        "b": "index",
+        "ratio": 1.8
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "portrait",
+        "b": "index"
+      },
+      {
+        "kind": "below",
+        "a": "coordinates",
+        "b": "portrait"
+      }
+    ]
+  },
+  "reverse-stage": {
+    "desktop": [
+      {
+        "kind": "right",
+        "a": "work",
+        "b": "statement",
+        "ratio": 0
+      },
+      {
+        "kind": "wider",
+        "a": "work",
+        "b": "statement",
+        "ratio": 1.3
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "work",
+        "b": "statement"
+      },
+      {
+        "kind": "below",
+        "a": "record",
+        "b": "work"
+      }
+    ]
+  },
+  "switchback-stories": {
+    "desktop": [
+      {
+        "kind": "below",
+        "a": "second",
+        "b": "first"
+      },
+      {
+        "kind": "below",
+        "a": "proof",
+        "b": "second"
+      },
+      {
+        "kind": "right",
+        "a": "first-copy",
+        "b": "first-photo"
+      },
+      {
+        "kind": "right",
+        "a": "second-photo",
+        "b": "second-copy"
+      },
+      {
+        "kind": "wider",
+        "a": "first-photo",
+        "b": "first-copy",
+        "ratio": 1.4
+      },
+      {
+        "kind": "wider",
+        "a": "second-photo",
+        "b": "second-copy",
+        "ratio": 1.4
+      }
+    ],
+    "mobile": [
+      {
+        "kind": "below",
+        "a": "second",
+        "b": "first"
+      },
+      {
+        "kind": "below",
+        "a": "proof",
+        "b": "second-photo"
+      },
+      {
+        "kind": "below",
+        "a": "first-copy",
+        "b": "first-photo"
+      },
+      {
+        "kind": "below",
+        "a": "second-copy",
+        "b": "second-photo"
+      }
+    ]
+  }
+}

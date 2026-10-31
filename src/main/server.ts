@@ -7,6 +7,8 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { findFrame } from '../shared/model'
 import { TOOLS, type ToolContext } from './tools'
 import { frameDocument } from './frameHtml'
+import { STYLE_PRECEDENCE } from './prompt'
+import { styleInputSchema } from './styles'
 import { previews } from './previews'
 
 export const DEFAULT_PORT = 7801
@@ -18,13 +20,13 @@ function buildMcp(ctx: ToolContext): McpServer {
     { name: 'chalk', version: '0.1.0' },
     {
       instructions:
-        'Chalk is a canvas design app on this Mac. Start with get_canvas and get_design_guidelines for the screen type and current project DESIGN.md. Inspect selected references with screenshot_frame; read HTML designs with get_frame (standalone=true returns a full document). Preserve user references and brand rules. For a new design without a visual direction, list and load an original style with get_style. Reuse its semantic tokens across screens. After creating or changing a frame, call review_frame and inspect both its image and layout diagnostics, then fix issues and recheck. When asked to build a design in code, reproduce the frame exactly in the project\'s own stack.'
+        STYLE_PRECEDENCE + ' Chalk is a canvas design app on this Mac. Start with get_canvas and get_design_guidelines for the screen type and current project DESIGN.md. Inspect selected references with screenshot_frame; read HTML designs with get_frame (standalone=true returns a full document). Preserve user references and brand rules. For a new design without a visual direction, list and load an original style with get_style. Reuse its semantic tokens across screens. After creating or changing a frame, call review_frame and inspect both its image and layout diagnostics, then fix issues and recheck. When asked to build a design in code, reproduce the frame exactly in the project\'s own stack.'
     }
   )
   for (const t of TOOLS) {
     server.registerTool(
       t.name,
-      { description: t.description, inputSchema: t.input, annotations: { readOnlyHint: !!t.readOnly } },
+      { description: t.description, inputSchema: t.name === 'get_style' ? styleInputSchema : t.input, annotations: { readOnlyHint: !!t.readOnly } },
       async (args: Record<string, unknown>) => {
         try {
           return { content: await t.run(args as never, ctx) }
