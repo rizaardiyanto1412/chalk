@@ -227,33 +227,32 @@ export async function checkStyles({ app, win, client, call, json, check, artifac
   const variant = win.getByRole('combobox', { name: 'Variant', exact: true })
   const logs = () => existsSync(fakeLog) ? readFileSync(fakeLog, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l)) : []
   const promptCount = () => logs().filter(l => l.type === 'user').length
-  const send = async text => {
+  const send = async (text, selection = null) => {
     const count = promptCount()
-    await win.locator('.chat textarea').fill(text)
-    await win.locator('.chat textarea').press('Enter')
+    if (selection) {
+      await win.evaluate(({ text, style }) => window.chalk.invoke('agent:send', { text, model: '', style }), { text, style: selection })
+    } else {
+      await win.locator('.chat textarea').fill(text)
+      await win.locator('.chat textarea').press('Enter')
+    }
     await win.waitForFunction(() => document.querySelector('.chat .thinking'), null, { timeout: 10000 })
-    assert.equal(await style.isDisabled(), true)
     await win.waitForFunction(() => !document.querySelector('.chat .thinking'), null, { timeout: 15000 })
-    assert.equal(await style.isDisabled(), false)
     assert.equal(promptCount(), count + 1, JSON.stringify(logs()))
     const content = logs().filter(l => l.type === 'user').at(-1).message.content
     return typeof content === 'string' ? content : content.filter(block => block.type === 'text').map(block => block.text).join('\n')
   }
-  await check('legacy recipes hide the single default Variant control', async () => {
-    for (const expected of legacy) {
-      await style.selectOption(expected.id)
-      assert.equal(await variant.count(), 0)
-    }
-    await style.selectOption('')
+  await check('Chat hides Style and Variant controls while keeping the composer available', async () => {
+    assert.equal(await style.count(), 0)
+    assert.equal(await variant.count(), 0)
+    assert.equal(await win.locator('.chat textarea').isVisible(), true)
   })
-  await check('real Chat controls carry the full resolved recipe through actual SDK CLI transport', async () => {
-    await style.selectOption('terrain-register'); await variant.selectOption('atlas')
-    const prompt = await send('Keep the supplied brief and use this direction.')
+  await check('explicit style IPC carries the full resolved recipe through actual SDK CLI transport', async () => {
+    const prompt = await send('Keep the supplied brief and use this direction.', { id: 'terrain-register', variant: 'atlas' })
     const serialized = prompt.match(/<chosen-style>\n([^]*?)\n<\/chosen-style>/)?.[1]
     assert.ok(serialized, prompt)
     assert.deepEqual(JSON.parse(serialized), await load({ name: 'terrain-register', variant: 'atlas' }))
     assert.match(prompt, /current written instruction; selected references; project brand and DESIGN.md; chosen style; autonomous agent choice/)
-    assert.equal(await style.inputValue(), '')
+    assert.equal(await style.count(), 0)
     assert.equal(await variant.count(), 0)
     const requests = logs().filter(l => l.type === 'control_request')
     assert.ok(requests.some(r => r.request.subtype === 'initialize'), 'real SDK initialization recorded')
@@ -265,25 +264,23 @@ export async function checkStyles({ app, win, client, call, json, check, artifac
     const reference = json(await call(client, 'get_canvas')).frames.find(f => f.name === 'Style reference')
     try {
       await win.evaluate(id => window.chalk.invoke('select', [id]), reference.id)
-      await style.selectOption('current-index'); await variant.selectOption('alternate')
-      const prompt = await send('Respect the reference crop.')
+      const prompt = await send('Respect the reference crop.', { id: 'current-index', variant: 'alternate' })
       assert.ok(prompt.indexOf('Selected image references:') >= 0)
       assert.ok(prompt.indexOf('Selected image references:') < prompt.indexOf('<chosen-style>'))
       assert.deepEqual(JSON.parse(prompt.match(/<chosen-style>\n([^]*?)\n<\/chosen-style>/)[1]), await load({ name: 'current-index', variant: 'alternate' }))
     } finally { await call(client, 'delete_frame', { id: reference.id }) }
   })
-  await check('Automatic omits the style block and New chat clears the one-shot selection', async () => {
-    assert.equal(await style.inputValue(), '')
+  await check('normal Chat sends omit the style block, including after New chat', async () => {
     const prompt = await send('Keep the current direction.')
     assert.doesNotMatch(prompt, /chosen-style/)
-    await style.selectOption('screen-relay')
     await win.getByRole('button', { name: 'New', exact: true }).click()
-    assert.equal(await style.inputValue(), '')
+    assert.doesNotMatch(await send('Design a warm editorial coffee page.'), /chosen-style/)
+    await win.getByRole('button', { name: 'New', exact: true }).click()
+    assert.equal(await style.count(), 0)
     assert.equal(await variant.count(), 0)
   })
-  await check('project change clears the style without storing a preference', async () => {
+  await check('project changes preserve the draft with no style controls or saved preference', async () => {
     const other = mkdtempSync(join(tmpdir(), 'chalk-style-switch-'))
-    await style.selectOption('workshop-journal')
     await win.locator('.chat textarea').fill('Keep this draft across project switches.')
     await app.evaluate(({ dialog }, dir) => {
       globalThis.originalStyleOpenDialog = dialog.showOpenDialog
@@ -292,12 +289,11 @@ export async function checkStyles({ app, win, client, call, json, check, artifac
     try {
       await win.evaluate(() => window.chalk.invoke('project', 'open'))
       await win.waitForFunction(dir => document.querySelector('.tab.is-on')?.title === dir, other)
-      assert.equal(await style.inputValue(), '')
+      assert.equal(await style.count(), 0)
       assert.equal(await win.locator('.chat textarea').inputValue(), 'Keep this draft across project switches.')
-      await style.selectOption('task-theater')
       await win.evaluate(dir => window.chalk.invoke('project', 'switch', dir), project)
       await win.waitForFunction(dir => document.querySelector('.tab.is-on')?.title === dir, project)
-      assert.equal(await style.inputValue(), '')
+      assert.equal(await style.count(), 0)
       assert.equal(await win.locator('.chat textarea').inputValue(), 'Keep this draft across project switches.')
     } finally {
       await app.evaluate(({ dialog }) => { dialog.showOpenDialog = globalThis.originalStyleOpenDialog })
@@ -314,7 +310,7 @@ export async function checkStyles({ app, win, client, call, json, check, artifac
     await win.waitForFunction(() => [...document.querySelectorAll('.msg-error')].filter(el => el.textContent.includes('Invalid style or message')).length === 4)
     await new Promise(resolve => setTimeout(resolve, 1000))
     assert.equal(await win.locator('.msg-error').filter({ hasText: 'Invalid style or message' }).count(), 4)
-    assert.equal(await style.isDisabled(), false)
+    assert.equal(await style.count(), 0)
     assert.equal(logs().filter(l => l.type === 'spawn').length, count)
   })
   await check('live AI design quality', async () => ({ skip: 'Not measured. Tests use a local fake executable through the real SDK; no user Claude CLI, credentials or live model is accessed.' }))

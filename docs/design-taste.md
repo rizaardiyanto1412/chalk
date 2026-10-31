@@ -12,11 +12,9 @@ The agent is instructed to view the selected reference before it designs. For an
 
 ## Choose a starting style
 
-Use **Style** beside the Chat input to choose a direction. Each option shows its original Chalk name and, where applicable, its direction name. Use the dependent **Variant** control for an alternate treatment. **Automatic** leaves the choice to the agent.
+Describe what you want in Chat. The agent chooses a direction from your request, references, and project rules; there are no Style or Variant controls to configure. To request a specific style, name it in your message.
 
-The choice attaches to your next message. Sending, starting a new chat, or changing projects clears it. It is not a saved project preference and does not automatically restyle existing frames. Controls are disabled while the agent works.
-
-Chalk includes 32 recipes. Six preserve the original presets. The other 26 cover editorial, technical, illustrated, product, graphic and photographic compositions with two curated variants each. These are original Chalk definitions, not imported templates or artwork. Variants replace complete palettes and change type, edge or elevation treatment. Imagery choices are local to each recipe. Omitting `imagery` uses the first listed mode; Chat uses that default. Use supplied or verified media, original diagrams, or explicit placeholders.
+Chalk includes 32 recipes. Six preserve the original presets. The other 26 cover editorial, technical, illustrated, product, graphic and photographic compositions with two curated variants each. These are original Chalk definitions, not imported templates or artwork. Variants replace complete palettes and change type, edge or elevation treatment. Imagery choices are local to each recipe. Omitting `imagery` uses the first listed mode. Use supplied or verified media, original diagrams, or explicit placeholders.
 
 Visual priority follows this order:
 
@@ -32,7 +30,7 @@ Through MCP, call `get_style()` for the compact catalog. Load an ID, Chalk displ
 
 Place `fontLinks` and `theme` before the fragment and apply `font-sans` to its root. New recipes supply `text-display`, `py-section`, `px-gutter`, `rounded-control`, `rounded-panel`, `shadow-raised`, `font-caption` and `font-mono` alongside semantic color utilities. The six original recipes retain their exact earlier payloads and themes.
 
-The in-app agent receives the full resolved recipe in that turn's prompt. It does not have to infer the attachment from a name or request the recipe again. External MCP clients load the same registry through `get_style`.
+The in-app agent and external MCP clients load the same registry through `get_style`.
 
 ## Save your project rules
 
