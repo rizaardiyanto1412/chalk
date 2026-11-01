@@ -7,6 +7,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { findFrame } from '../shared/model'
 import { TOOLS, type ToolContext } from './tools'
 import { frameDocument } from './frameHtml'
+import { frameCss } from './tailwind'
 import { CANVAS_ELEMENT_SCRIPT } from './canvasElements'
 import { STYLE_PRECEDENCE } from './prompt'
 import { styleInputSchema } from './styles'
@@ -88,7 +89,7 @@ export function startServer(contexts: ContextResolver, port: number, registry = 
     if (previewMatch) {
       const preview = previews.get(previewMatch[1])
       if (preview === undefined) return send(res, 404, 'text/plain', 'no such preview')
-      return send(res, 200, 'text/html; charset=utf-8', preview.kind === 'document' ? preview.html : frameDocument({ name: 'Preview', html: preview.html }, '/vendor/tailwind.js'))
+      return send(res, 200, 'text/html; charset=utf-8', preview.kind === 'document' ? preview.html : frameDocument({ name: 'Preview', html: preview.html }, '/vendor/tailwind.js', await frameCss(preview.html)))
     }
     if (url.pathname === '/vendor/tailwind.js') return send(res, 200, 'text/javascript', TAILWIND_JS)
     const frameMatch = url.pathname.match(/^\/frame\/([\w-]+)$/)
@@ -99,7 +100,7 @@ export function startServer(contexts: ContextResolver, port: number, registry = 
       const f = findFrame(ctx.store.doc, frameMatch[1])
       if (!f) return send(res, 404, 'text/plain', 'no such frame')
       if (f.kind === 'image') return send(res, 200, 'text/html', `<!doctype html><body style="margin:0"><img src="/assets/${f.asset}" style="display:block;width:100%">`)
-      const html = frameDocument(f, '/vendor/tailwind.js')
+      const html = frameDocument(f, '/vendor/tailwind.js', await frameCss(f.html))
       return send(res, 200, 'text/html; charset=utf-8', url.searchParams.get('canvas') === '1' ? html.replace('<head>', `<head>${CANVAS_ELEMENT_SCRIPT}`) : html)
     }
     if (assetMatch) {
