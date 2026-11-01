@@ -270,6 +270,20 @@ export async function checkStyles({ app, win, client, call, json, check, artifac
       assert.deepEqual(JSON.parse(prompt.match(/<chosen-style>\n([^]*?)\n<\/chosen-style>/)[1]), await load({ name: 'current-index', variant: 'alternate' }))
     } finally { await call(client, 'delete_frame', { id: reference.id }) }
   })
+  await check('full landing-page guide reaches the real SDK before the user turn', async () => {
+    const guide = readFileSync(join(root, 'src/main/guides/landing-page.md'), 'utf8')
+    const entries = logs()
+    const initializations = entries.filter(entry => entry.type === 'control_request' && entry.request.subtype === 'initialize')
+    assert.ok(initializations.length > 0, 'SDK initialization was recorded')
+    assert.ok(entries.findIndex(entry => entry.type === 'control_request' && entry.request.subtype === 'initialize') < entries.findIndex(entry => entry.type === 'user'))
+    for (const entry of initializations) {
+      assert.ok(entry.request.systemPrompt.join('\n').includes(guide), 'SDK must receive the complete landing-page guide')
+    }
+    const fromMcp = (await call(client, 'get_design_guidelines', { screen_type: 'landing-page' }))[0].text
+    assert.ok(fromMcp.includes(guide), 'MCP must serve the same complete guide')
+    const dashboard = (await call(client, 'get_design_guidelines', { screen_type: 'dashboard' }))[0].text
+    assert.ok(!dashboard.includes(guide), 'dashboard guidance stays specific to its screen type')
+  })
   await check('normal Chat sends omit the style block, including after New chat', async () => {
     const prompt = await send('Keep the current direction.')
     assert.doesNotMatch(prompt, /chosen-style/)

@@ -2,6 +2,8 @@
 
 Chalk uses your references and project rules to guide the agent. Its style presets provide a starting point when you have no specific direction. These instructions do not train or fine-tune the model.
 
+The [landing-page guide](../src/main/guides/landing-page.md) covers the offer, copy, evidence, section sequence, readable type, imagery, and conversion actions. Chalk includes its full text in the in-app agent's system instructions before the first tool call. Connected agents receive the same text through `get_design_guidelines({screen_type: "landing-page"})`. Other screen types still have shorter guides. Supplying the guide verifies delivery, not that a model follows every instruction or produces a better design.
+
 ## Design from a reference
 
 1. Drop a PNG or JPG onto the canvas, or capture a page from Chalk's browser.

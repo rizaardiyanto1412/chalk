@@ -1,6 +1,7 @@
 import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
+import landingPageGuide from './guides/landing-page.md?raw'
 
 export const SCREEN_TYPES = ['general', 'landing-page', 'web-app', 'mobile-app', 'dashboard'] as const
 export const screenTypeSchema = z.enum(SCREEN_TYPES)
@@ -8,7 +9,7 @@ export type ScreenType = z.infer<typeof screenTypeSchema>
 
 export const SCREEN_GUIDES: Record<ScreenType, string> = {
   general: 'Identify who uses this screen, what they need to understand, and their next action. Choose a dominant region before placing components. Reuse the existing brand and component vocabulary across screens.',
-  'landing-page': 'Choose one conversion goal. Write the headline and proof before arranging the page. The first view must explain the offer and show a useful next action. Give each section a different role in the argument: explain, demonstrate, substantiate, or invite action. Vary image and text density deliberately. Avoid repeating the same equal-card grid. Use specific evidence and believable copy rather than unsupported claims. Keep a readable text area when photography carries the hero.',
+  'landing-page': landingPageGuide,
   'web-app': 'Design the working task, not a promotional page. Show the current location, selected entity, and available next action. Make the main work area dominant; add a sidebar only if repeated navigation needs it. Keep filters and actions close to the records they affect. Include a believable selected, empty, loading, or error state where relevant. Put infrequent operations in quieter contextual controls. Use one consistent density and component vocabulary.',
   'mobile-app': 'Start at 390px unless the user specifies a device. Preserve the task hierarchy in one primary column. Use touch targets of at least 44px, clear labels, and room around adjacent actions. Respect top and bottom safe areas. Avoid desktop sidebars and miniature tables. Place the key next action where it remains visible without hiding content. Show one real state and keep any secondary sheet distinct from the screen beneath it.',
   dashboard: 'Start with the operational question and its time range. Give the table, chart, or queue that answers it most of the space. Include units, labels, timestamps, and realistic values. Align numeric columns and use tabular numbers. Place filters together and visibly indicate their current settings. Summaries should explain the underlying data rather than repeat arbitrary numbers. Distinguish status with text as well as color. Do not invent trends that conflict with displayed values.'

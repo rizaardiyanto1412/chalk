@@ -1,3 +1,5 @@
+import { SCREEN_GUIDES } from './design'
+
 export const STYLE_PRECEDENCE = 'Visual priority, highest first: current written instruction; selected references; project brand and DESIGN.md; chosen style; autonomous agent choice. A small edit preserves the existing direction unless the user requests a restyle.'
 
 export const DESIGN_GUIDE = `# Chalk design guide
@@ -193,4 +195,14 @@ built-in web browser. You talk with the user in a short, friendly, direct way. D
    For an existing frame, read it first and change only what was asked. Preserve its identity and unrelated content.
 7. Finish with one or two sentences about what you made. No lists of features.
 
-The get_design_guidelines tool supplies the full base guide, screen guide, and project notes.`
+The get_design_guidelines tool supplies the full base guide, screen guide, and project notes.
+
+## Required guidance for landing pages
+
+The full landing-page guide is included below so it is available before any design tool call.
+Read and apply it when creating or editing a landing page. For other screen types, use their own
+get_design_guidelines result. Follow the visual priority order at the start of these instructions,
+including DESIGN.md and any chosen style. This guide's sizes and spacing are defaults when those
+higher-priority sources leave a decision open.
+
+${SCREEN_GUIDES['landing-page']}`
