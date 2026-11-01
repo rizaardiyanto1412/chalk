@@ -148,13 +148,13 @@ export async function checkPresence({ app, win, client, call, json, check, artif
       frames.push(created.id)
       await win.waitForFunction((id) => {
         const frame = document.querySelector(`[data-frame-id="${id}"]`)?.getBoundingClientRect()
-        const cursor = document.querySelector('.canvas-presence .presence-cursor')?.getBoundingClientRect()
+        const cursor = document.querySelector('.canvas-presence .canvas-cursor-body')?.getBoundingClientRect()
         return !!frame && !!cursor && !!document.querySelector('.canvas-presence .presence-scan') && Math.abs(cursor.x - frame.x - 12) < 3 && Math.abs(cursor.y - frame.y + 16) < 3
       }, created.id, { timeout: 3000 })
       const bounds = await win.evaluate((id) => {
         const frame = document.querySelector(`[data-frame-id="${id}"]`).getBoundingClientRect()
         const scan = document.querySelector('.canvas-presence .presence-scan').getBoundingClientRect()
-        const cursor = document.querySelector('.canvas-presence .presence-cursor').getBoundingClientRect()
+        const cursor = document.querySelector('.canvas-presence .canvas-cursor-body').getBoundingClientRect()
         const style = getComputedStyle(document.querySelector('.canvas-presence'))
         const animation = document.querySelector('.canvas-presence .presence-band').getAnimations()[0]
         return { frame: frame.toJSON(), scan: scan.toJSON(), cursor: cursor.toJSON(), pointerEvents: style.pointerEvents, animation: animation?.playState }
@@ -163,6 +163,17 @@ export async function checkPresence({ app, win, client, call, json, check, artif
       assert.ok(Math.abs(bounds.cursor.x - bounds.frame.x - 12) < 3)
       assert.ok(Math.abs(bounds.cursor.y - bounds.frame.y + 16) < 3)
       assert.equal(bounds.pointerEvents, 'none')
+      // The cursor is pinned to the canvas: panning moves it with the frame at once, with no glide behind it.
+      const box = await win.locator('.canvas').boundingBox()
+      await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+      await win.mouse.wheel(140, 90)
+      const pinned = await win.evaluate((id) => {
+        const frame = document.querySelector(`[data-frame-id="${id}"]`).getBoundingClientRect()
+        const cursor = document.querySelector('.canvas-presence .canvas-cursor-body').getBoundingClientRect()
+        return { dx: cursor.x - frame.x, dy: cursor.y - frame.y }
+      }, created.id)
+      assert.ok(Math.abs(pinned.dx - 12) < 3 && Math.abs(pinned.dy + 16) < 3, `cursor lagged the pan: ${JSON.stringify(pinned)}`)
+      await win.mouse.wheel(-140, -90)
       assert.equal(bounds.animation, 'running')
       await win.frameLocator(`[data-frame-id="${created.id}"] iframe`).getByRole('heading', { name: 'A clear next step.' }).waitFor()
       await win.locator('.canvas').screenshot({ path: join(evidence, 'canvas-cursor-sweep.png') })
@@ -206,7 +217,7 @@ export async function checkPresence({ app, win, client, call, json, check, artif
       } finally { await pending }
       const created = json(await call(client, 'create_frame', { name: 'Static presence fixture', width: 240, height: 200, html: '<div>Reduced motion</div>' })).created
       frames.push(created.id)
-      await win.waitForSelector(`.canvas-presence[data-presence-frame="${created.id}"]`)
+      await win.waitForSelector(`.canvas-presence[data-presence-frame="${created.id}"]`, { state: 'attached' })
       assert.deepEqual(await win.locator('.canvas-presence').evaluate((el) => ({ animations: el.getAnimations({ subtree: true }).length, cursor: getComputedStyle(el.querySelector('.presence-cursor')).transitionDuration, scan: getComputedStyle(el.querySelector('.presence-band')).display })), { animations: 0, cursor: '0s', scan: 'none' })
       await win.evaluate(() => window.chalk.invoke('agent:send', { text: '[presence-fixture] Static status.', model: 'sonnet' }))
       await win.waitForSelector('.agent-presence')

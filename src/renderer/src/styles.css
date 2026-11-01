@@ -278,6 +278,11 @@ body.is-resizing iframe { pointer-events: none; }
 .live-draft-state { flex-shrink: 0; padding: 0 5px; border-radius: 4px; background: color-mix(in srgb, var(--agent) 12%, transparent); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
 .live-draft-empty { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in srgb, var(--agent) 4%, #fff); color: color-mix(in srgb, var(--agent) 70%, #71717a); font-size: calc(14px / var(--zoom)); font-weight: 500; }
 .live-cursors .presence-tag { max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+/* Canvas cursors live in world space: only the agent's own moves animate, never the camera */
+.world > .chalk-presence { inset: auto; left: 0; top: 0; width: 0; height: 0; }
+.presence-cursor.canvas-cursor { width: 0; height: 0; filter: none; }
+.canvas-cursor-body { position: absolute; width: 22px; height: 24px; transform: scale(calc(1 / var(--zoom))); transform-origin: 0 0; filter: drop-shadow(0 2px 3px #17255426); }
+.canvas-cursor-body > svg { display: block; width: 22px; height: 24px; overflow: visible; fill: var(--presence-accent); stroke: white; stroke-width: 1.5; stroke-linejoin: round; }
 .live-activity { font-weight: 400; opacity: .85; }
 .live-scan .presence-band { background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--presence-accent) 3%, transparent) 22%, color-mix(in srgb, var(--presence-accent) 12%, transparent) 65%, color-mix(in srgb, var(--presence-accent) 18%, transparent) 86%, transparent 100%); }
 @keyframes live-pulse { 50% { opacity: .35; } }

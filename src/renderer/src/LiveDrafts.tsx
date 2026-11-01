@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
 import { agentColor, type LiveDraft, type LiveRun } from '../../shared/run'
-import { PRESENCE_CURSOR_PATH } from '../../shared/presenceVisual'
-
-type Cam = { x: number; y: number; zoom: number }
+import { CanvasCursor } from './CanvasPresence'
 
 /** Workers' private drafts, drawn read-only in world coordinates while a run is active. */
 export function LiveDraftFrames({ live, port }: { live: LiveRun; port: number }) {
@@ -30,21 +28,15 @@ function DraftView({ draft, port }: { draft: LiveDraft; port: number }) {
   </>
 }
 
-/** One cursor per worker, in screen space, gliding to the part of its draft it last changed. */
-export function LiveCursors({ live, cam }: { live: LiveRun; cam: Cam }) {
+/** One cursor per worker, pinned in world coordinates on the part of its draft it last changed. */
+export function LiveCursors({ live }: { live: LiveRun }) {
   return <div className="chalk-presence live-cursors" aria-hidden="true">
     {live.cursors.map((c) => {
       const d = live.drafts.find((draft) => draft.id === c.draftId)
       if (!d) return null
-      const left = cam.x + d.x * cam.zoom
-      const top = cam.y + d.y * cam.zoom
-      const style = { '--presence-accent': agentColor(c.agent) } as React.CSSProperties
-      return <div key={`${c.runId}:${c.jobId}`} data-live-cursor={c.jobId} style={style}>
-        {c.scans > 0 && <div key={c.scans} className="presence-scan live-scan" style={{ left, top, width: d.width * cam.zoom, height: d.height * cam.zoom, right: 'auto', bottom: 'auto' }}><div className="presence-band" /></div>}
-        <div className="presence-cursor" style={{ transform: `translate(${left + c.fx * d.width * cam.zoom}px, ${top + c.fy * d.height * cam.zoom}px)` }}>
-          <svg viewBox="0 0 22 24"><path d={PRESENCE_CURSOR_PATH} /></svg>
-          <span className="presence-tag">{c.label}<span className="live-activity"> · {c.activity}</span></span>
-        </div>
+      return <div key={`${c.runId}:${c.jobId}`} data-live-cursor={c.jobId} style={{ '--presence-accent': agentColor(c.agent) } as React.CSSProperties}>
+        {c.scans > 0 && <div key={c.scans} className="presence-scan live-scan" style={{ left: d.x, top: d.y, width: d.width, height: d.height, right: 'auto', bottom: 'auto' }}><div className="presence-band" /></div>}
+        <CanvasCursor x={d.x + c.fx * d.width} y={d.y + c.fy * d.height}>{c.label}<span className="live-activity"> · {c.activity}</span></CanvasCursor>
       </div>
     })}
   </div>

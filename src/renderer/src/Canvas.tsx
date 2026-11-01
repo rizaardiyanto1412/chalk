@@ -506,10 +506,9 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
           )
         })}
         <LiveDraftFrames live={liveRun} port={port} />
+        <LiveCursors live={liveRun} />
+        <CanvasPresence visual={presence} frames={doc.frames.map((frame) => ({ ...frame, ...draft[frame.id] }))} />
       </div>
-
-      <LiveCursors live={liveRun} cam={cam} />
-      <CanvasPresence visual={presence} frames={doc.frames.map((frame) => ({ ...frame, ...draft[frame.id] }))} cam={cam} />
 
       {outlineHits.map(({ kind, hit }) => {
         const frame = hit && doc.frames.find((f) => f.id === hit.frameId)
