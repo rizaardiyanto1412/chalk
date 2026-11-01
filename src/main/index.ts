@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { Server } from 'node:http'
-import { BROWSER_DEVICE_IDS, type BrowserDeviceId, EXPORT_FORMATS, findFrame, type CopyImageResult, type ExportActivity, type ExportResult, type EditCommand, type NativeEditCommand, type FrameId, type Op } from '../shared/model'
+import { BROWSER_DEVICE_IDS, type BrowserDeviceId, EXPORT_FORMATS, findFrame, type AgentEvent, type CopyImageResult, type ExportActivity, type ExportResult, type EditCommand, type NativeEditCommand, type FrameId, type Op } from '../shared/model'
 import { Store } from './store'
 import { selectedElements, removeElements } from './elements'
 import { elementHitSchema, samePath } from '../shared/elementSelection'
@@ -16,6 +16,8 @@ import { renderUrl } from './render'
 import { randomUUID } from 'node:crypto'
 import type { ToolContext } from './tools'
 import { Agent, findClaude, MODELS } from './agent'
+import { Presence } from './presence'
+import { activityForTool, type PresenceState } from '../shared/presence'
 import { frameDocument } from './frameHtml'
 import { buildExport, copyFrameImage, exportFileName, exportFormatSchema, snapshotExport, writeExport } from './export'
 import { loadStyle, styleChoiceSchema, styleSummaries } from './styles'
@@ -25,6 +27,7 @@ const store = new Store()
 let win: BrowserWindow | null = null
 let browser: Browser
 let agent: Agent
+const presence = new Presence()
 let port = Number(process.env.CHALK_PORT) || DEFAULT_PORT
 let server: Server | null = null
 
@@ -286,7 +289,8 @@ function registerIpc(): void {
     browser: browser.state(),
     recentUrls: config.recentUrls,
     tabs: tabs(),
-    agentStatus: agent.status
+    agentStatus: agent.status,
+    presence: presence.state
   }))
   handle('op', (_e, input: Op | Op[]) => {
     const ops = Array.isArray(input) ? input : [input]
@@ -463,6 +467,7 @@ app.whenReady().then(async () => {
   toolContext = {
     store,
     browser,
+    presence,
     origin: () => `http://127.0.0.1:${port}`,
     photoKeys,
     frameUrl: (f) => `http://127.0.0.1:${port}/frame/${f.id}?v=${f.updatedAt}`,
@@ -493,8 +498,20 @@ app.whenReady().then(async () => {
     store.browserPick = pick
     send('browser:pick', pick)
   })
-  agent.on('event', (e) => send('agent:event', e))
-  agent.on('status', (s) => send('agent:status', s))
+  presence.on('change', (state: PresenceState) => {
+    send('presence', state)
+    void browser.present(state.visual).catch((error) => console.error('Browser presence failed', error))
+  })
+  agent.on('event', (e: AgentEvent) => {
+    if (e.type === 'start') presence.dispatch({ type: 'turn-start', since: Date.now(), model: e.model })
+    if (e.type === 'model') presence.dispatch({ type: 'model', model: e.model })
+    if (e.type === 'tool') presence.dispatch({ type: 'activity', activity: activityForTool(e.name) })
+    send('agent:event', e)
+  })
+  agent.on('status', (s) => {
+    if (s === 'idle') presence.dispatch({ type: 'turn-end' })
+    send('agent:status', s)
+  })
 
   await listen(toolContext)
   registerIpc()

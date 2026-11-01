@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { BROWSER_DEVICE_IDS, findFrame, nextSlot, FRAME_GAP, type Frame, type FrameId, type HtmlFrame } from '../shared/model'
 import type { Store } from './store'
 import type { Browser } from './browser'
+import type { Presence } from './presence'
+import { browserActionForTool } from '../shared/presence'
 import { renderUrl } from './render'
 import { createPreview } from './previews'
 import { contactSheet, searchPhotos, type PhotoKeys } from './photos'
@@ -19,6 +21,7 @@ export type Content = { type: 'text'; text: string } | { type: 'image'; data: st
 export interface ToolContext {
   store: Store
   browser: Browser
+  presence: Presence
   frameUrl: (frame: Frame) => string
   origin: () => string
   photoKeys: () => PhotoKeys
@@ -36,7 +39,28 @@ export interface Tool<S extends z.ZodRawShape = z.ZodRawShape> {
   run: (args: z.infer<z.ZodObject<S>>, ctx: ToolContext) => Promise<Content[]>
 }
 
-const tool = <S extends z.ZodRawShape>(t: Tool<S>): Tool => t as unknown as Tool
+const tool = <S extends z.ZodRawShape>(t: Tool<S>): Tool => ({
+  ...t,
+  run: async (args: z.infer<z.ZodObject<S>>, ctx: ToolContext) => {
+    const id = ctx.presence.begin(t.name)
+    const scoped = { ...ctx, focus: (target: Parameters<ToolContext['focus']>[0]) => {
+      ctx.focus(target)
+      if (target.mode === 'canvas' && target.frameId) ctx.presence.focus(id, t.name, { kind: 'frame', frameId: target.frameId })
+    } }
+    try {
+      const action = browserActionForTool(t.name)
+      if (action) {
+        ctx.focus({ mode: 'browser' })
+        const ref = 'ref' in args && typeof args.ref === 'string' ? args.ref : undefined
+        ctx.presence.focus(id, t.name, await ctx.browser.presenceTarget(action, ref))
+        if (action !== 'scan') await ctx.browser.presenceReady()
+      }
+      return await t.run(args, scoped)
+    } finally {
+      ctx.presence.finish(id)
+    }
+  }
+}) as unknown as Tool
 
 const text = (value: unknown): Content => ({ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) })
 
@@ -130,6 +154,7 @@ export const TOOLS: Tool[] = [
     readOnly: true,
     run: async ({ id, standalone }, ctx) => {
       const f = requireHtml(ctx, id)
+      ctx.focus({ mode: 'canvas', frameId: f.id })
       return [text(standalone ? frameDocument(f) : f.html)]
     }
   }),

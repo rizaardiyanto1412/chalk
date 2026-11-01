@@ -6,6 +6,8 @@ import { BrowserPane } from './BrowserPane'
 import { Chat } from './Chat'
 import { Inspector } from './Inspector'
 import { nativeEditing } from './editFocus'
+import { idlePresence } from '../../shared/presence'
+import { PRESENCE_CSS } from '../../shared/presenceVisual'
 import { Icon, type IconName } from './icons'
 
 type LeftTab = 'agent' | 'frames'
@@ -29,6 +31,7 @@ export function App() {
   const [pick, setPick] = useState<BrowserPick | null>(null)
   const [events, setEvents] = useState<AgentEvent[]>([])
   const [status, setStatus] = useState<AgentStatus>('idle')
+  const [presence, setPresence] = useState(idlePresence)
   const [zoom, setZoom] = useState(1)
   const [exportActivity, setExportActivity] = useState<ExportActivity | null>(null)
   const [frameError, setFrameError] = useState<string | null>(null)
@@ -57,6 +60,7 @@ export function App() {
       setBrowser(s.browser)
       setRecent(s.recentUrls)
       setStatus(s.agentStatus)
+      setPresence(s.presence)
     })
     const offs = [
       api.on.exportActivity(setExportActivity),
@@ -79,6 +83,7 @@ export function App() {
       }),
       api.on.agentEvent((e) => setEvents((prev) => [...prev, e])),
       api.on.agentStatus(setStatus),
+      api.on.presence(setPresence),
       api.on.history((direction) => {
         if (nativeEditing()) void api.nativeEdit(direction)
         else void api.history(direction)
@@ -133,6 +138,7 @@ export function App() {
 
   return (
     <div className="app">
+      <style>{PRESENCE_CSS}</style>
       <div className="workspace">
         <header className="titlebar">
           <span className="brand"><span className="brand-mark" /> Chalk</span>
@@ -179,6 +185,7 @@ export function App() {
                   <Chat
                     events={events}
                     status={status}
+                    presence={presence}
                     models={init.models}
                     claudePath={init.claudePath}
                     selectedFrames={selectedFrames}
@@ -227,7 +234,7 @@ export function App() {
           </div>
 
           <main className="stage">
-            <Canvas key={project.epoch} ref={canvas} doc={doc} port={init.port} projectEpoch={project.epoch} selection={selection} selectedElements={elements} onSelect={select} onZoom={setZoom} tool={tool} exportBusy={exportActivity?.status === 'busy'} />
+            <Canvas key={project.epoch} ref={canvas} doc={doc} port={init.port} projectEpoch={project.epoch} selection={selection} selectedElements={elements} onSelect={select} onZoom={setZoom} tool={tool} exportBusy={exportActivity?.status === 'busy'} presence={presence.visual} />
             {exportActivity && (
               <div className={`export-notice ${exportActivity.status === 'error' ? 'is-error' : ''}`} role={exportActivity.status === 'error' ? 'alert' : 'status'}>
                 <span>{exportActivity.status === 'busy' || exportActivity.status === 'error'

@@ -16,6 +16,7 @@ import { checkStyles } from './styles-e2e.mjs'
 import { checkArrangement } from './arrangement-e2e.mjs'
 import { checkElements } from './elements-e2e.mjs'
 import { checkMarquee } from './marquee-e2e.mjs'
+import { checkPresence } from './presence-e2e.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const artifacts = process.env.CHALK_E2E_ARTIFACTS || join(root, 'e2e-artifacts')
@@ -53,8 +54,8 @@ const site = createServer((req, res) => {
   else if (req.url === '/analytics') res.end(page('Analytics', '<p>Charts.</p>'))
   else res.end(page('Home', '<p>Welcome to Test Co.</p>'))
 })
-await new Promise((r) => site.listen(7912, '127.0.0.1', r))
-const SITE = 'http://127.0.0.1:7912'
+await new Promise((r) => site.listen(PORT + 1, '127.0.0.1', r))
+const SITE = `http://127.0.0.1:${PORT + 1}`
 
 const launch = () =>
   electron.launch({ args: [root, `--user-data-dir=${profile}`], cwd: root, env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'ELECTRON_RUN_AS_NODE')), CHALK_CLAUDE_PATH: join(root, 'scripts/fixtures/fake-claude.mjs'), CHALK_FAKE_LOG: fakeLog, CHALK_PROJECT_DIR: project, CHALK_PORT: String(PORT), ELECTRON_RENDERER_URL: '' } })
@@ -97,6 +98,8 @@ await check('UI boots with the agent panel, tool strip, project tab, and browser
   await agentTab()
   await win.screenshot({ path: join(artifacts, '01-empty.png') })
 })
+
+await checkPresence({ app, win, client, call, json, check, artifacts, agentTab })
 
 await check('MCP lists the shared canvas, design, and browser tools', async () => {
   const { tools } = await client.listTools()
@@ -468,8 +471,8 @@ await check('dropping a PNG on the canvas adds an image frame where it lands', a
 await check('recent URLs show on the browser start page and clear', async () => {
   await win.locator('.url-home').click()
   await win.waitForSelector('.recent-row')
-  assert.ok((await win.locator('.recent-row').allInnerTexts()).some((t) => t.includes('127.0.0.1:7912')))
-  await win.locator('.recent-row', { hasText: '127.0.0.1:7912/pricing' }).click()
+  assert.ok((await win.locator('.recent-row').allInnerTexts()).some((t) => t.includes(new URL(SITE).host)))
+  await win.locator('.recent-row', { hasText: `${new URL(SITE).host}/pricing` }).click()
   await win.waitForFunction(() => !document.querySelector('.browser-home'))
   await win.locator('.url-home').click()
   await win.locator('.recent-head button').click()
