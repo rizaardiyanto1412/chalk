@@ -110,11 +110,12 @@ await check('MCP lists the shared canvas, design, and browser tools', async () =
   const { tools } = await client.listTools()
   assert.deepEqual(tools.map((t) => t.name).sort(), [
     'get_canvas', 'get_frame', 'screenshot_frame', 'review_frame', 'export_frame', 'copy_frame_image', 'create_frame', 'update_frame', 'edit_frame', 'delete_frame',
-    'get_style', 'get_design_guidelines', 'search_photos', 'browser_state', 'browser_navigate', 'browser_snapshot', 'browser_click',
+    'get_style', 'get_design_guidelines', 'search_photos', 'check_numbers', 'browser_state', 'browser_navigate', 'browser_snapshot', 'browser_click',
     'browser_set_device', 'browser_type', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_capture_to_canvas', 'browser_extract_styles'
   ].sort())
   assert.equal(tools.find((t) => t.name === 'get_style').annotations.readOnlyHint, true)
   assert.equal(tools.find((t) => t.name === 'search_photos').annotations.readOnlyHint, true)
+  assert.equal(tools.find((t) => t.name === 'check_numbers').annotations.readOnlyHint, true)
   assert.equal(tools.find((t) => t.name === 'review_frame').annotations.readOnlyHint, true)
 })
 
@@ -199,6 +200,27 @@ await check('review_frame measures overflow and failed images, then reflects a r
     assert.equal(after.clippedBelowFramePx, 0)
     assert.deepEqual(after.failedImages, [])
     assert.equal(after.pendingImages, 0)
+  } finally {
+    await call(client, 'delete_frame', { id: out.created.id })
+  }
+})
+
+await check('check_numbers lists numeric statements and catches arithmetic that does not add up', async () => {
+  const out = json(await call(client, 'create_frame', { name: 'Numbers fixture', width: 390, height: 200, html: '<div class="p-4"><p>Finish this run and you close your <b>32 km</b> week.</p><p>24.6 of 32 km</p><ul><li>Annual $588</li></ul><script>var n = 99</script></div>' }))
+  try {
+    const listed = json(await call(client, 'check_numbers', { id: out.created.id }))
+    assert.deepEqual(listed.numbers, ['Finish this run and you close your 32 km week.', '24.6 of 32 km', 'Annual $588'])
+    const report = json(await call(client, 'check_numbers', { id: out.created.id, claims: [
+      { says: 'today closes the week', expression: '24.6 + 8.0', shown: '32 km' },
+      { says: 'two months free', expression: '$59 x 10', shown: '$588' },
+      { says: 'progress', expression: 'round(24.6 / 32 * 100)', shown: '77%' },
+      { says: 'billing days', expression: '2026-12-01 - 2026-11-01', shown: '30 days' },
+      { says: 'unreadable', expression: '12 % 5', shown: '2' }
+    ] }))
+    assert.equal(report.checked, 5)
+    assert.deepEqual(report.results.map((r) => r.status), ['mismatch', 'mismatch', 'ok', 'ok', 'error'])
+    assert.equal(report.results[0].computed, 32.6)
+    assert.equal(report.failed, 3)
   } finally {
     await call(client, 'delete_frame', { id: out.created.id })
   }

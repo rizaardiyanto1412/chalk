@@ -15,6 +15,7 @@ const TOOL_LABELS: Record<string, string> = {
   delete_frame: 'Deleted frame',
   screenshot_frame: 'Reviewed frame',
   review_frame: 'Checked frame layout',
+  check_numbers: 'Checked numbers',
   get_style: 'Explored visual style',
   get_design_guidelines: 'Read design guide',
   browser_state: 'Checked browser',

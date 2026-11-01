@@ -11,6 +11,7 @@ import { renderUrl } from './render'
 import { createPreview } from './previews'
 import { contactSheet, searchPhotos, type PhotoKeys } from './photos'
 import { frameDocument } from './frameHtml'
+import { checkClaim, numberLines } from './numbers'
 import { resolveStyle, styleInputSchema } from './styles'
 import { DESIGN_GUIDE, STYLE_PRECEDENCE } from './prompt'
 import { projectDesignNotes, SCREEN_GUIDES, screenTypeSchema } from './design'
@@ -277,6 +278,27 @@ export const TOOLS: Tool[] = [
       } finally {
         preview.dispose()
       }
+    }
+  }),
+  tool({
+    name: 'check_numbers',
+    description: 'Check that the numbers in a frame add up, using real arithmetic instead of mental maths. Call it with no claims to list every visible statement that contains a number. Then call it again with one claim per relationship on screen (totals, remainders, percentages, discounts, unit price times quantity, averages, durations, day counts): what the screen says, an arithmetic expression built from the other values on screen, and the value the screen prints. Expressions allow + - * / ( ), round(x, digits), floor, ceil, abs, min, max, sum, avg, and YYYY-MM-DD dates as day numbers (2026-12-01 - 2026-11-01 is 30). A claim passes when the expression rounds to the printed value at its printed precision. Fix every mismatch in the frame, or change the wording, then check again.',
+    input: {
+      id: z.string(),
+      claims: z.array(z.object({
+        says: z.string().min(1).max(300),
+        expression: z.string().min(1).max(500),
+        shown: z.string().min(1).max(80)
+      })).max(80).optional()
+    },
+    readOnly: true,
+    run: async ({ id, claims }, ctx) => {
+      const f = requireHtml(ctx, id)
+      ctx.focus({ mode: 'canvas', frameId: f.id })
+      if (!claims?.length) return [text({ numbers: numberLines(f.html), next: 'Call check_numbers again with one claim for every relationship between these numbers.' })]
+      const results = claims.map(checkClaim)
+      const failed = results.filter((r) => r.status !== 'ok')
+      return [text({ checked: results.length, failed: failed.length, results, ...(failed.length ? { next: 'Fix each mismatch in the frame with edit_frame, then call check_numbers again.' } : {}) })]
     }
   }),
   tool({
