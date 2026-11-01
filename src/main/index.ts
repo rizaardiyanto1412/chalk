@@ -29,6 +29,7 @@ import { configLocations, createConnections, type ConnectDeps } from './connectA
 import { findCli } from './agentCli'
 import { Run } from './run'
 import { WorkerRegistry, type PageCapture } from './worker'
+import { LiveRunView } from './liveRun'
 import { isOrdinary, priorRunNote, runSettingsSchema } from '../shared/run'
 
 const store = new Store()
@@ -37,6 +38,7 @@ let browser: Browser
 let agent: Agent
 let run: Run | null = null
 const registry = new WorkerRegistry()
+const liveRun = new LiveRunView(() => store.doc, (state) => send('run:live', state))
 const busy = () => agent?.status === 'running' || !!run?.active
 const presence = new Presence()
 let port = Number(process.env.CHALK_PORT) || DEFAULT_PORT
@@ -427,7 +429,7 @@ function registerIpc(): void {
         chats.append(event)
         send('agent:event', event)
       }
-      run = new Run({ store, registry, emit, capturePage, measure: toolContext.measure, origin: toolContext.origin, photoKeys,
+      run = new Run({ store, registry, emit, capturePage, measure: toolContext.measure, origin: toolContext.origin, photoKeys, live: liveRun,
         focus: frameId => send('focus', { mode: 'canvas', frameId, source: 'agent' }),
         progress: progress => {
           send('run:progress', progress)

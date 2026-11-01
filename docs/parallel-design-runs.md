@@ -8,9 +8,9 @@ With variations off and one agent, Chalk uses its ordinary chat path and saved C
 
 For one page, main joins sections in planned order and an integrator checks the seams. Main checks that every section marker survives exactly once in order. If integration fails, Chalk keeps the assembled page and labels it `not integrated`. If a section fails, completed sections appear as partial frames. A complete alternative that fails publishes no drafts.
 
-Results are new frames. Selected originals remain references, and each worker has private drafts. Main places completed frames against the current canvas geometry. You can keep moving and adding frames during a run. Each published batch is one Undo step. A run never changes a frame after publishing it.
+Results are new frames. Selected originals remain references, and each worker has private drafts. While a run is active, each worker's drafts appear on the canvas as read-only frames with a dashed outline in that worker's colour, and each worker has its own named cursor. The cursor moves to the part of the draft the worker last changed and sweeps the draft when the worker reviews it. Drafts are not in the document: you cannot select or edit them, and Undo ignores them. A completed frame publishes where its draft stood, unless something now occupies that space. You can keep moving and adding frames during a run. Each published batch is one Undo step. A run never changes a frame after publishing it.
 
-The run card shows queued, running, completed, failed and canceled tasks. **Stop** cancels queued tasks and revokes active worker access immediately. Chalk stays busy until active queries and tools finish cleanup. Frames already published remain on the canvas. Unfinished drafts stay private.
+The run card shows queued, running, completed, failed and canceled tasks. **Stop** cancels queued tasks and revokes active worker access immediately. Chalk stays busy until active queries and tools finish cleanup. Frames already published remain on the canvas. Unfinished drafts disappear and are never saved.
 
 Every managed Send captures the visible HTTP(S) page as a reference, including a logged-in page. The selected settings stay active until you change them.
 

@@ -12,6 +12,7 @@ import { DraftBook, WorkerResources, type Draft, type PageCapture, type Referenc
 import { frozenHtml, referenceAssetNames, workerTools } from './workerTools'
 import { PLANNER_SYSTEM, plannerPrompt, workerPrompt } from './runPrompt'
 import { newId } from './tools'
+import type { LiveRunView } from './liveRun'
 
 export interface RunDeps {
   store: Store
@@ -23,6 +24,7 @@ export interface RunDeps {
   measure: WorkerContext['measure']
   origin: () => string
   photoKeys: WorkerContext['photoKeys']
+  live: LiveRunView
 }
 interface LiveJob { ctx: WorkerContext; token: string }
 export class Run {
@@ -74,6 +76,7 @@ export class Run {
     for (const job of this.jobs.values()) if (this.states.get(job.id) === 'queued') this.jobNotice(job, 'canceled')
     this.queue.length = 0
     this.controller.abort()
+    this.deps.live.clear(this.id)
   }
   private notice(text: string, run: RunNoticeMeta): void { this.deps.emit({ type: 'notice', text, run }) }
   private jobNotice(job: JobSpec, state: 'running' | 'done' | 'failed' | 'canceled', extra: Partial<Extract<RunNoticeMeta, { kind: 'job' }>> = {}): void {
@@ -111,6 +114,7 @@ export class Run {
           const job = this.queue.shift()
           if (!job) break
           const work = this.launch(job, plan, refs, claude).catch(async error => {
+            this.deps.live.removeJob(this.id, job.id)
             this.hadFailure = true
             this.costComplete = false
             this.results.delete(job.id)
@@ -138,6 +142,7 @@ export class Run {
       const durationMs = Date.now() - start
       this.notice(`Design run ${outcome} · ${this.committed.length} frame(s).`, { kind: 'finished', runId: this.id, outcome, frameIds: this.committed, costUsd: this.costUsd, costComplete: this.costComplete, durationMs })
       this.deps.emit({ type: 'done', costUsd: this.costUsd, durationMs })
+      this.deps.live.clear(this.id)
       this.phase = 'finished'
     }
   }
@@ -183,10 +188,18 @@ export class Run {
     return job.direction.style ? loadStyle({ name: job.direction.style.id, variant: job.direction.style.variant }) : null
   }
   private async launch(job: JobSpec, plan: Plan, refs: ReferenceSet, claude: string): Promise<void> {
-    const drafts = new DraftBook(job.maxDrafts, job.fixedWidth, job.role, this.seeds.get(job.id))
+    const live = this.deps.live
+    const drafts = new DraftBook(job.maxDrafts, job.fixedWidth, job.role, this.seeds.get(job.id), (draft, id) => {
+      if (this.phase !== 'running') return
+      if (draft) live.draft(this.id, job, draft)
+      else live.remove(this.id, job.id, id)
+    })
+    live.start(this.id, job)
     const controller = new AbortController()
-    const ctx: WorkerContext = { job, refs, drafts, controller, signal: controller.signal, origin: this.deps.origin, photoKeys: this.deps.photoKeys, measure: this.deps.measure, resources: new WorkerResources(), activity: activity => {
-      if (this.phase === 'running') this.deps.progress({ runId: this.id, jobId: job.id, activity })
+    const ctx: WorkerContext = { job, refs, drafts, controller, signal: controller.signal, origin: this.deps.origin, photoKeys: this.deps.photoKeys, measure: this.deps.measure, resources: new WorkerResources(), activity: (activity, args) => {
+      if (this.phase !== 'running') return
+      this.deps.progress({ runId: this.id, jobId: job.id, activity })
+      live.activity(this.id, job, activity, args)
     } }
     const token = this.deps.registry.issue(ctx)
     this.live.set(job.id, { token, ctx })
@@ -200,13 +213,17 @@ export class Run {
       catch (error) {
         this.hadFailure = true
         this.deps.emit({ type: 'error', text: `Worker cleanup failed: ${String(error).replaceAll(token, '[redacted]')}` })
-      } finally { this.live.delete(job.id) }
+      } finally {
+        this.live.delete(job.id)
+        live.finish(this.id, job.id)
+      }
     }
     this.addCost(result.costUsd)
     if (this.phase !== 'running') { this.jobNotice(job, 'canceled', { costUsd: result.costUsd }); return }
     const final = drafts.list()
     const valid = result.ok && final.length === job.maxDrafts
     if (!valid) {
+      live.removeJob(this.id, job.id)
       this.hadFailure = true
       if (job.role !== 'integrate') this.jobNotice(job, 'failed', { error: result.error ?? `Expected ${job.maxDrafts} draft(s), received ${final.length}.`, costUsd: result.costUsd })
     } else {
@@ -258,6 +275,9 @@ export class Run {
     }
     if (this.phase !== 'running') return
     const seed: Draft = { id: newId(), name: plan.directions[group]?.title ?? `Variation ${group + 1}`, html, width: plan.contract.width, height, revision: 1 }
+    const first = sections[0] && parts[0] ? this.deps.live.position(this.id, sections[0].id, parts[0].id) : undefined
+    for (const j of sections) this.deps.live.removeJob(this.id, j.id)
+    this.deps.live.draft(this.id, integrator, frozenSeed(seed, refs, this.deps.origin), first)
     this.seeds.set(integrator.id, seed)
     this.fallbacks.set(integrator.id, seed)
     this.queue.unshift(integrator)
@@ -271,15 +291,26 @@ export class Run {
     const ops: Op[] = drafts.map(d => {
       const id = newId()
       ids.push(id)
-      const frame = { id, kind: 'html' as const, name: `${d.name} · ${job.label}`, html: frozenHtml(d.html, { refs, origin: this.deps.origin }), width: d.width, height: d.height, x, y: slot.y, updatedAt: Date.now() }
-      x += d.width + FRAME_GAP
+      // Publish where the live draft stood so the frame replaces it in place.
+      const stood = this.deps.live.position(this.id, job.id, d.id)
+      const taken = (p: { x: number; y: number }) => store.doc.frames.some(f => p.x < f.x + f.width && p.x + d.width > f.x && p.y < f.y + f.height && p.y + d.height > f.y)
+      const at = stood && !taken(stood) ? stood : { x, y: slot.y }
+      const frame = { id, kind: 'html' as const, name: `${d.name} · ${job.label}`, html: frozenHtml(d.html, { refs, origin: this.deps.origin }), width: d.width, height: d.height, ...at, updatedAt: Date.now() }
+      x = Math.max(x, at.x + d.width + FRAME_GAP)
       return { type: 'add', frame }
     })
     if (ops.length) {
       store.dispatch(ops)
+      for (const d of drafts) this.deps.live.remove(this.id, job.id, d.id)
       this.committed.push(...ids)
       if (ids[0]) this.deps.focus(ids[0])
     }
     return ids
   }
+}
+
+/** Live drafts render without the run's captured assets, so inline them the same way publishing does. */
+function frozenSeed(seed: Draft, refs: ReferenceSet, origin: () => string): Draft {
+  try { return { ...seed, html: frozenHtml(seed.html, { refs, origin }) } }
+  catch { return seed }
 }

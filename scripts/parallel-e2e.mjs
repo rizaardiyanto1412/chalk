@@ -454,6 +454,11 @@ export async function checkParallel({ root, artifacts, check }) {
     const original = await addOriginal(f)
     await f.send(settings(3, 2))
     const held = await f.waitHeld(2)
+    // Let the camera finish following the new live drafts before grabbing a frame.
+    await until(() => f.win.locator('.live-draft iframe').count(), n => n >= 2, 'live drafts shown')
+    await pause(400)
+    await f.win.getByRole('button', { name: 'Zoom to fit (⌘0)' }).click()
+    await pause(200)
     const label = f.win.locator(`[data-frame-id="${original.id}"] .frame-label`)
     await label.waitFor()
     const bounds = await label.boundingBox()
@@ -573,6 +578,36 @@ store.projectEpoch++; const result = Reflect.get(run, 'commit').call(run, { labe
     await f.send(ordinary, 'Ordinary after an interrupted run.')
     assert.match(await f.win.locator('.run-card').last().innerText(), /Interrupted|interrupted/)
     await f.idle()
+  })
+  await test('T18 live drafts and colored agent cursors show workers on the canvas and publish in place', async f => {
+    const original = await addOriginal(f)
+    await f.send(settings(2, 2))
+    const held = await f.waitHeld(2)
+    const drafts = () => f.win.locator('.live-draft').evaluateAll(els => els.map(el => ({ id: el.dataset.liveDraft, x: parseFloat(el.style.left), y: parseFloat(el.style.top), src: el.querySelector('iframe')?.getAttribute('src') ?? null, color: el.style.getPropertyValue('--agent') })))
+    const live = await until(drafts, d => d.length === 2 && d.every(x => x.src), 'two live drafts with renders')
+    assert.equal(new Set(live.map(d => d.color)).size, 2, 'each agent has its own colour')
+    assert.equal(overlap([...live.map(d => ({ ...d, width: 640, height: 140 })), original]), false, 'drafts sit beside existing frames')
+    for (const d of live) {
+      const html = await (await fetch(`http://127.0.0.1:${f.port}${new URL(d.src).pathname}`)).text()
+      assert.match(html, /Variant \d/, 'draft preview serves the worker HTML')
+    }
+    const cursors = await until(() => f.win.locator('[data-live-cursor]').evaluateAll(els => els.map(el => ({ job: el.dataset.liveCursor, color: el.style.getPropertyValue('--presence-accent'), tag: el.querySelector('.presence-tag')?.textContent ?? '' }))), c => c.length === 2, 'two agent cursors')
+    assert.equal(new Set(cursors.map(c => c.color)).size, 2)
+    assert.ok(cursors.every(c => c.tag.includes('·')), 'cursor tags name the agent and its activity')
+    await f.win.screenshot({ path: join(evidence, 'T17-live.png') })
+    assert.equal((await f.init()).doc.frames.length, 1, 'drafts stay out of the document until published')
+
+    f.release(held[0])
+    const doc = await until(async () => (await f.init()).doc, d => d.frames.length === 2, 'first published frame')
+    const published = doc.frames.find(fr => fr.id !== original.id)
+    assert.ok(live.some(d => d.x === published.x && d.y === published.y), 'the frame publishes where its draft stood')
+    await until(drafts, d => d.length === 1, 'published draft leaves the live layer')
+    f.release(held[1])
+    await f.idle()
+    await until(() => f.win.locator('.live-draft, [data-live-cursor]').count(), n => n === 0, 'live layer cleared after the run')
+    const final = (await f.init()).doc.frames
+    assert.equal(final.length, 3)
+    assert.equal(overlap(final), false)
   })
   await test('T16 popovers support keyboard named inputs disabled modes and one count announcement', async f => {
     const variations = f.win.getByRole('button', { name: 'Variations', exact: true })

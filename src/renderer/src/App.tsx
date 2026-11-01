@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AgentStatus, BrowserPick, Doc, ExportActivity, FrameId, SelectedElement } from '../../shared/model'
 import type { ChatHistoryState } from '../../shared/chats'
+import type { LiveRun } from '../../shared/run'
 import { api, type BrowserState, type InitState, type ProjectTab } from './api'
 import { Canvas, type CanvasHandle, type CanvasTool } from './Canvas'
 import { BrowserPane } from './BrowserPane'
@@ -34,6 +35,8 @@ export function App() {
   const [chatHistory, setChatHistory] = useState<ChatHistoryState | null>(null)
   const [status, setStatus] = useState<AgentStatus>('idle')
   const [followPaused, setFollowPaused] = useState(false)
+  const [liveRun, setLiveRun] = useState<LiveRun>({ drafts: [], cursors: [] })
+  const followedDrafts = useRef('')
   const agentFrame = useRef<FrameId | null>(null)
   const followIdle = useRef<ReturnType<typeof setTimeout>>(undefined)
 
@@ -101,6 +104,18 @@ export function App() {
       api.on.chatHistory(setChatHistory),
       api.on.agentStatus(setStatus),
       api.on.presence(setPresence),
+      api.on.runLive((state) => {
+        setLiveRun(state)
+        // Follow a run as its drafts appear, unless the user has moved the canvas.
+        const ids = state.drafts.map((d) => d.id).join()
+        if (!state.drafts.length || ids === followedDrafts.current) return
+        followedDrafts.current = ids
+        const x = Math.min(...state.drafts.map((d) => d.x))
+        const y = Math.min(...state.drafts.map((d) => d.y))
+        const r = Math.max(...state.drafts.map((d) => d.x + d.width))
+        const b = Math.max(...state.drafts.map((d) => d.y + d.height))
+        if (canvas.current?.followRect({ x, y, width: r - x, height: b - y }) === false) setFollowPaused(true)
+      }),
       api.on.history((direction) => {
         if (nativeEditing()) void api.nativeEdit(direction)
         else void api.history(direction)
@@ -254,7 +269,7 @@ export function App() {
           </div>
 
           <main className="stage">
-            <Canvas key={project.epoch} ref={canvas} doc={doc} port={init.port} projectEpoch={project.epoch} selection={selection} selectedElements={elements} onSelect={select} onZoom={setZoom} tool={tool} exportBusy={exportActivity?.status === 'busy'} presence={presence.visual} />
+            <Canvas key={project.epoch} ref={canvas} doc={doc} port={init.port} projectEpoch={project.epoch} selection={selection} selectedElements={elements} onSelect={select} onZoom={setZoom} tool={tool} exportBusy={exportActivity?.status === 'busy'} presence={presence.visual} live={liveRun} />
             {exportActivity && (
               <div className={`export-notice ${exportActivity.status === 'error' ? 'is-error' : ''}`} role={exportActivity.status === 'error' ? 'alert' : 'status'}>
                 <span>{exportActivity.status === 'busy' || exportActivity.status === 'error'

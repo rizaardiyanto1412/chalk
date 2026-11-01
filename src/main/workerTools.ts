@@ -21,8 +21,9 @@ export interface WorkerTool {
 function tool<S extends z.ZodRawShape>(name: string, description: string, input: S, run: (args: z.infer<z.ZodObject<S>>, ctx: WorkerContext) => Promise<Content[]>, readOnly = false): WorkerTool {
   const schema = z.strictObject(input)
   return { name, description, input, readOnly, run: (args, ctx) => ctx.resources.tool(ctx, async () => {
-    ctx.activity(name)
-    return run(schema.parse(args), ctx)
+    const parsed = schema.parse(args)
+    ctx.activity(name, parsed)
+    return run(parsed, ctx)
   }) }
 }
 function owned(ctx: WorkerContext, id: string): Readonly<Draft> {

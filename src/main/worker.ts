@@ -13,7 +13,7 @@ export interface Draft { id: FrameId; name: string; html: string; width: number;
 export class DraftBook {
   private readonly drafts = new Map<string, Readonly<Draft>>()
   private sealed = false
-  constructor(readonly max: number, readonly fixedWidth: number | null, readonly role: JobSpec['role'], seed?: Draft) {
+  constructor(readonly max: number, readonly fixedWidth: number | null, readonly role: JobSpec['role'], seed?: Draft, private readonly onChange?: (draft: Readonly<Draft> | null, id: string) => void) {
     if (seed) this.drafts.set(seed.id, Object.freeze({ ...seed, styleBlocks: sectionStyleCount(seed.html) }))
   }
   assertOpen(): void { if (this.sealed) throw new Error('This run was stopped or the job has finished.') }
@@ -30,13 +30,16 @@ export class DraftBook {
       if (issues.length) throw new Error(`Section fragments cannot include ${issues.join(', ')}. Use body content only, without scripts.`)
     }
     const revision = (previous?.revision ?? 0) + 1
-    this.drafts.set(d.id, Object.freeze({ ...d, revision, styleBlocks: sectionStyleCount(d.html) }))
+    const next = Object.freeze({ ...d, revision, styleBlocks: sectionStyleCount(d.html) })
+    this.drafts.set(d.id, next)
+    this.onChange?.(next, d.id)
     return revision
   }
   remove(id: string): void {
     this.assertOpen()
     if (this.role === 'integrate') throw new Error('The integrator cannot delete its seed.')
     if (!this.drafts.delete(id)) throw new Error('No owned draft with that id.')
+    this.onChange?.(null, id)
   }
   seal(): readonly Readonly<Draft>[] { this.sealed = true; return this.list() }
 }
@@ -67,7 +70,7 @@ export interface WorkerContext {
   readonly origin: () => string
   readonly photoKeys: () => PhotoKeys
   readonly measure: (html: string, width: number) => Promise<number>
-  readonly activity: (tool: string) => void
+  readonly activity: (tool: string, args?: unknown) => void
   readonly resources: WorkerResources
 }
 export class WorkerResources {

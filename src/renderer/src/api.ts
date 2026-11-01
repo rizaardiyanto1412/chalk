@@ -1,4 +1,4 @@
-import type { RunSettings, RunProgress } from '../../shared/run'
+import type { RunSettings, RunProgress, LiveRun } from '../../shared/run'
 import type { AgentConnection, ConnectAgentId } from '../../shared/connectAgents'
 import type { StyleChoice, StyleSummary } from '../../shared/styles'
 import type { PresenceState } from '../../shared/presence'
@@ -71,6 +71,7 @@ export const api = {
   addImage: (img: { name: string; bytes: Uint8Array; x: number; y: number }) => e().invoke('image:add', img),
   on: {
     runProgress: (fn: (p: RunProgress) => void) => e().on('run:progress', fn),
+    runLive: (fn: (s: LiveRun) => void) => e().on('run:live', fn),
     edit: (fn: (command: EditCommand) => void) => e().on('edit', fn),
     elementSelection: (fn: (element: SelectedElement[]) => void) => e().on('element:selection', fn),
     selection: (fn: (ids: FrameId[]) => void) => e().on('selection', fn),

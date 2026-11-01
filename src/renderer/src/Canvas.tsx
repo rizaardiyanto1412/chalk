@@ -8,6 +8,8 @@ import { Icon } from './icons'
 import { useCanvasElements } from './useCanvasElements'
 import type { PresenceVisual } from '../../shared/presence'
 import { CanvasPresence } from './CanvasPresence'
+import { LiveCursors, LiveDraftFrames } from './LiveDrafts'
+import type { LiveRun } from '../../shared/run'
 
 interface Camera {
   x: number
@@ -29,6 +31,8 @@ export interface CanvasHandle {
   focusFrame: (id: FrameId) => void
   /** Bring the agent's frame into view, unless the user has moved around the canvas since following was armed. Returns false when it held still for the user. */
   followFrame: (id: FrameId) => boolean
+  /** Same as followFrame for a world rectangle, such as the drafts of a running design run. */
+  followRect: (r: { x: number; y: number; width: number; height: number }) => boolean
   armFollow: () => void
   fit: () => void
   zoomBy: (k: number) => void
@@ -47,6 +51,7 @@ interface Props {
   tool: CanvasTool
   exportBusy: boolean
   presence: PresenceVisual
+  live: LiveRun
 }
 
 type MarqueePreview =
@@ -68,7 +73,7 @@ const MIN_ZOOM = 0.05
 const MAX_ZOOM = 4
 const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
 
-export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, port, projectEpoch, selection, selectedElements, onSelect, onZoom, tool, exportBusy, presence }, ref) {
+export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, port, projectEpoch, selection, selectedElements, onSelect, onZoom, tool, exportBusy, presence, live: liveRun }, ref) {
   const host = useRef<HTMLDivElement>(null)
   const [cam, setCam] = useState<Camera>({ x: 80, y: 80, zoom: 0.5 })
   const camRef = useRef(cam)
@@ -156,6 +161,17 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
     })
   }, [])
 
+  /** Mostly visible horizontally, with its top in the upper part of the view. */
+  const inView = useCallback((r: { x: number; y: number; width: number }) => {
+    const el = host.current
+    if (!el) return true
+    const c = camRef.current
+    const left = r.x * c.zoom + c.x
+    const top = r.y * c.zoom + c.y
+    const shown = (Math.min(el.clientWidth, left + r.width * c.zoom) - Math.max(0, left)) / (r.width * c.zoom)
+    return shown >= 0.9 && top >= 0 && top < el.clientHeight * 0.6
+  }, [])
+
   const focusFrame = useCallback((id: FrameId) => {
     const f = docRef.current.frames.find((fr) => fr.id === id)
     if (f) fitRect({ x: f.x, y: f.y, width: f.width, height: Math.min(f.height, f.width * 1.2) }, 0.9)
@@ -168,14 +184,12 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
     followFrame: (id) => {
       if (userMoved.current) return false
       const f = docRef.current.frames.find((fr) => fr.id === id)
-      const el = host.current
-      if (!f || !el) return true
-      const c = camRef.current
-      const left = f.x * c.zoom + c.x
-      const top = f.y * c.zoom + c.y
-      const shown = (Math.min(el.clientWidth, left + f.width * c.zoom) - Math.max(0, left)) / (f.width * c.zoom)
-      const startsInView = top >= 0 && top < el.clientHeight * 0.6
-      if (shown < 0.9 || !startsInView) focusFrame(id)
+      if (f && !inView(f)) focusFrame(id)
+      return true
+    },
+    followRect: (r) => {
+      if (userMoved.current) return false
+      if (!inView(r)) fitRect({ ...r, height: Math.min(r.height, r.width * 0.75) }, 0.9)
       return true
     },
     armFollow: () => { userMoved.current = false }
@@ -491,8 +505,10 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
             </div>
           )
         })}
+        <LiveDraftFrames live={liveRun} port={port} />
       </div>
 
+      <LiveCursors live={liveRun} cam={cam} />
       <CanvasPresence visual={presence} frames={doc.frames.map((frame) => ({ ...frame, ...draft[frame.id] }))} cam={cam} />
 
       {outlineHits.map(({ kind, hit }) => {

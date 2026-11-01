@@ -166,3 +166,11 @@ export function priorRunNote(events: readonly AgentEvent[], frames: readonly Fra
   const lines = foldRuns(events.slice(since + 1)).flatMap(r => r.jobs.flatMap(j => j.frameIds.map(id => `${j.label} → frame ${id} (${names.get(id) ?? j.label})`)))
   return lines.length ? `Prior design runs produced these editable frames:\n${lines.join('\n')}`.slice(0, 2000) : null
 }
+
+/** A worker's private draft shown read-only on the canvas while the run is active. `token` serves its HTML; null is a slot reserved before the first draft. */
+export interface LiveDraft { id: string; runId: RunId; jobId: JobId; agent: number; label: string; name: string | null; token: string | null; width: number; height: number; x: number; y: number; revision: number }
+/** Where one worker's cursor sits, as fractions of the live draft it is working on. `scans` counts reviews so each one replays the sweep. */
+export interface LiveCursor { runId: RunId; jobId: JobId; agent: number; label: string; draftId: string; fx: number; fy: number; activity: string; scans: number }
+export interface LiveRun { drafts: LiveDraft[]; cursors: LiveCursor[] }
+export const AGENT_COLORS = ['#2563eb', '#db2777', '#059669', '#d97706', '#7c3aed', '#0891b2'] as const
+export const agentColor = (agent: number): string => AGENT_COLORS[(agent - 1) % AGENT_COLORS.length] ?? AGENT_COLORS[0]
