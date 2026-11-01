@@ -6,18 +6,19 @@ import { frameDocument } from './frameHtml'
 type Element = DefaultTreeAdapterTypes.Element
 const elements = (node: DefaultTreeAdapterTypes.ParentNode): Element[] => node.childNodes.filter((child): child is Element => 'tagName' in child)
 
-function sourceElement(frame: HtmlFrame, path: number[]) {
+function sourceElements(frame: HtmlFrame, paths: number[][]) {
   const source = frameDocument(frame)
   const doc = parse(source, { sourceCodeLocationInfo: true })
   const html = elements(doc).find((el) => el.tagName === 'html')
-  let node = html && elements(html).find((el) => el.tagName === 'body')
-  for (const index of path) node = node && elements(node)[index]
-  const location = node?.sourceCodeLocation
+  const body = html && elements(html).find((el) => el.tagName === 'body')
   const offset = source.indexOf('<body>\n') + '<body>\n'.length
-  if (!node || !location || location.startOffset < offset || location.endOffset > offset + frame.html.length) return null
-  const start = location.startOffset - offset
-  const end = location.endOffset - offset
-  return { node, start, end }
+  return paths.map((path) => {
+    let node = body
+    for (const index of path) node = node && elements(node)[index]
+    const location = node?.sourceCodeLocation
+    if (!node || !location || location.startOffset < offset || location.endOffset > offset + frame.html.length) return null
+    return { node, start: location.startOffset - offset, end: location.endOffset - offset }
+  })
 }
 
 function textContent(node: DefaultTreeAdapterTypes.Node): string {
@@ -26,17 +27,27 @@ function textContent(node: DefaultTreeAdapterTypes.Node): string {
   return 'childNodes' in node ? node.childNodes.map(textContent).join('') : ''
 }
 
-export function selectedElement(frame: HtmlFrame, hit: ElementHit): SelectedElement | null {
-  const found = sourceElement(frame, hit.path)
-  if (!found || ['script', 'style', 'link', 'meta'].includes(found.node.tagName)) return null
-  return {
-    frameId: frame.id, frameName: frame.name, path: hit.path, tag: found.node.tagName,
-    text: textContent(found.node).replace(/\s+/g, ' ').trim().slice(0, 200),
-    rect: hit.rect, outerHTML: frame.html.slice(found.start, found.end).slice(0, 2000)
-  }
+export function selectedElements(frame: HtmlFrame, hits: ElementHit[]): SelectedElement[] {
+  const found = sourceElements(frame, hits.map((hit) => hit.path))
+  return hits.flatMap((hit, i) => {
+    const source = found[i]
+    if (!source || ['script', 'style', 'link', 'meta'].includes(source.node.tagName)) return []
+    return [{
+      frameId: frame.id, frameName: frame.name, path: hit.path, tag: source.node.tagName,
+      text: textContent(source.node).replace(/\s+/g, ' ').trim().slice(0, 200),
+      rect: hit.rect, outerHTML: frame.html.slice(source.start, source.end).slice(0, 2000)
+    }]
+  })
 }
 
-export function removeElement(frame: HtmlFrame, path: number[]): string | null {
-  const found = sourceElement(frame, path)
-  return found ? frame.html.slice(0, found.start) + frame.html.slice(found.end) : null
+export function removeElements(frame: HtmlFrame, paths: number[][]): string {
+  const ranges = sourceElements(frame, paths).flatMap((found) => found ? [{ start: found.start, end: found.end }] : [])
+    .sort((a, b) => a.start - b.start || b.end - a.end)
+  const removals: typeof ranges = []
+  for (const range of ranges) {
+    const previous = removals.at(-1)
+    if (previous && range.start < previous.end) previous.end = Math.max(previous.end, range.end)
+    else removals.push(range)
+  }
+  return removals.reverse().reduce((html, { start, end }) => html.slice(0, start) + html.slice(end), frame.html)
 }

@@ -22,7 +22,7 @@ export function App() {
   const [browserOpen, setBrowserOpen] = useState(() => localStorage.getItem('chalk.browserOpen') !== '0')
   const [browserWidth, setBrowserWidth] = useState(() => stored('chalk.browserWidth', 560))
   const [tool, setTool] = useState<CanvasTool>('select')
-  const [element, setElement] = useState<SelectedElement | null>(null)
+  const [elements, setElements] = useState<SelectedElement[]>([])
   const [selection, setSelection] = useState<FrameId[]>([])
   const [browser, setBrowser] = useState<BrowserState>({ url: '', title: '', loading: false, canGoBack: false, canGoForward: false, picking: false, device: 'responsive' })
   const [recent, setRecent] = useState<string[]>([])
@@ -38,7 +38,7 @@ export function App() {
 
   const select = useCallback((ids: FrameId[]) => {
     setSelection(ids)
-    setElement(null)
+    setElements([])
     void api.select(ids)
   }, [])
 
@@ -51,7 +51,7 @@ export function App() {
     void api.init().then((s) => {
       setInit(s)
       setDoc(s.doc)
-      setElement(s.selectedElement)
+      setElements(s.selectedElements)
       setProject(s.project)
       setTabs(s.tabs)
       setBrowser(s.browser)
@@ -61,7 +61,7 @@ export function App() {
     const offs = [
       api.on.exportActivity(setExportActivity),
       api.on.selection(setSelection),
-      api.on.elementSelection(setElement),
+      api.on.elementSelection(setElements),
       api.on.frameError(setFrameError),
       api.on.doc(setDoc),
       api.on.tabs(setTabs),
@@ -182,7 +182,7 @@ export function App() {
                     models={init.models}
                     claudePath={init.claudePath}
                     selectedFrames={selectedFrames}
-                    selectedElement={element}
+                    selectedElements={elements}
                     pick={pick}
                     onClearSelection={() => select([])}
                     onNewChat={() => {
@@ -193,7 +193,7 @@ export function App() {
                 </div>
                 {leftTab === 'frames' && (
                   <div className="layer-list">
-                    <Inspector selectedElement={element} frames={selectedFrames} projectEpoch={project.epoch} />
+                    <Inspector selectedElements={elements} frames={selectedFrames} projectEpoch={project.epoch} />
                     {doc.frames.length === 0 && <p className="layers-empty">Frames you and the agent make show up here.</p>}
                     {doc.frames.map((f) => (
                       <LayerRow
@@ -227,7 +227,7 @@ export function App() {
           </div>
 
           <main className="stage">
-            <Canvas key={project.epoch} ref={canvas} doc={doc} port={init.port} projectEpoch={project.epoch} selection={selection} selectedElement={element} onSelect={select} onZoom={setZoom} tool={tool} exportBusy={exportActivity?.status === 'busy'} />
+            <Canvas key={project.epoch} ref={canvas} doc={doc} port={init.port} projectEpoch={project.epoch} selection={selection} selectedElements={elements} onSelect={select} onZoom={setZoom} tool={tool} exportBusy={exportActivity?.status === 'busy'} />
             {exportActivity && (
               <div className={`export-notice ${exportActivity.status === 'error' ? 'is-error' : ''}`} role={exportActivity.status === 'error' ? 'alert' : 'status'}>
                 <span>{exportActivity.status === 'busy' || exportActivity.status === 'error'

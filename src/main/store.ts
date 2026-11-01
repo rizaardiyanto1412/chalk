@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { selectedElement } from './elements'
+import { selectedElements } from './elements'
 import { applyOp, emptyDoc, parseDoc, type Doc, type FrameId, type Op, type BrowserPick, type SelectedElement } from '../shared/model'
 
 const DOC_FILE = 'chalk.json'
@@ -14,7 +14,7 @@ export class Store extends EventEmitter {
   projectEpoch = 0
   selection: FrameId[] = []
   browserPick: BrowserPick | null = null
-  selectedElement: SelectedElement | null = null
+  selectedElements: SelectedElement[] = []
   private saveTimer: NodeJS.Timeout | null = null
   private past: Doc[] = []
   private future: Doc[] = []
@@ -31,7 +31,7 @@ export class Store extends EventEmitter {
       this.doc = emptyDoc()
     }
     this.selection = []
-    this.selectedElement = null
+    this.selectedElements = []
     this.past = []
     this.future = []
     this.emit('change', this.doc)
@@ -57,9 +57,8 @@ export class Store extends EventEmitter {
   private pruneSelection(doc = this.doc): void {
     const ids = new Set(doc.frames.map((f) => f.id))
     this.selection = this.selection.filter((id) => ids.has(id))
-    const picked = this.selectedElement
-    const frame = picked && doc.frames.find((f) => f.id === picked.frameId)
-    this.selectedElement = picked && frame?.kind === 'html' && this.selection.length === 1 && this.selection[0] === frame.id ? selectedElement(frame, picked) : null
+    const frame = doc.frames.find((f) => f.id === this.selectedElements[0]?.frameId)
+    this.selectedElements = frame?.kind === 'html' && this.selection.length === 1 && this.selection[0] === frame.id ? selectedElements(frame, this.selectedElements) : []
   }
 
   /** Step through history. Returns false when there is nothing to undo or redo. */

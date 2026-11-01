@@ -35,7 +35,7 @@ interface Props {
   models: readonly { id: string; label: string }[]
   claudePath: string | null
   selectedFrames: Frame[]
-  selectedElement: SelectedElement | null
+  selectedElements: SelectedElement[]
   pick: BrowserPick | null
   onClearSelection: () => void
   onNewChat: () => void
@@ -50,7 +50,7 @@ const SUGGESTIONS = [
   'Recipe detail page for a cooking magazine'
 ]
 
-export function Chat({ events, status, models, claudePath, selectedFrames, selectedElement, pick, onClearSelection, onNewChat }: Props) {
+export function Chat({ events, status, models, claudePath, selectedFrames, selectedElements, pick, onClearSelection, onNewChat }: Props) {
   const [text, setText] = useState('')
   const [model, setModel] = useState(() => localStorage.getItem('chalk.model') ?? '')
   const list = useRef<HTMLDivElement>(null)
@@ -111,8 +111,8 @@ export function Chat({ events, status, models, claudePath, selectedFrames, selec
             {selectedFrames.map((f) => (
               <span key={f.id} className="chip"><Icon name={f.kind === 'image' ? 'image' : 'frame'} size={12} /> {f.name}</span>
             ))}
-            {selectedElement && <span className="chip is-pick element-chip" title={`body/${selectedElement.path.join('/')}`}>
-              <Icon name="pointer" size={12} /> &lt;{selectedElement.tag}&gt; {selectedElement.text.slice(0, 28)}
+            {selectedElements.length > 0 && <span className="chip is-pick element-chip" title={selectedElements.map((element) => `body/${element.path.join('/')}`).join(', ')}>
+              <Icon name="pointer" size={12} /> {selectedElements.length > 1 ? `${selectedElements.length} elements` : `<${selectedElements[0].tag}> ${selectedElements[0].text.slice(0, 28)}`}
             </span>}
             {pick && (
               <span className="chip is-pick" title={pick.selector}>

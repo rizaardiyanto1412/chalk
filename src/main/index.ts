@@ -5,8 +5,8 @@ import { basename, join } from 'node:path'
 import type { Server } from 'node:http'
 import { BROWSER_DEVICE_IDS, type BrowserDeviceId, EXPORT_FORMATS, findFrame, type CopyImageResult, type ExportActivity, type ExportResult, type EditCommand, type NativeEditCommand, type FrameId, type Op } from '../shared/model'
 import { Store } from './store'
-import { selectedElement, removeElement } from './elements'
-import { elementHitSchema } from '../shared/elementSelection'
+import { selectedElements, removeElements } from './elements'
+import { elementHitSchema, samePath } from '../shared/elementSelection'
 import { FrameCommands, frameIdSchema, safeAssetName } from './frameCommands'
 import { Browser } from './browser'
 import { startServer, DEFAULT_PORT } from './server'
@@ -67,8 +67,8 @@ const mcpUrl = () => `http://127.0.0.1:${port}/mcp`
 const send = (channel: string, payload?: unknown) => win?.webContents.send(channel, payload)
 const frameCommands = new FrameCommands(store, (ids, focus) => {
   store.selection = ids
-  store.selectedElement = null
-  send('element:selection', null)
+  store.selectedElements = []
+  send('element:selection', [])
   send('selection', ids)
   if (focus && ids[0]) send('focus', { mode: 'canvas', frameId: ids[0] })
 })
@@ -275,7 +275,7 @@ function handle(channel: string, fn: (e: Electron.IpcMainInvokeEvent, ...args: a
 function registerIpc(): void {
   handle('init', () => ({
     doc: store.doc,
-    selectedElement: store.selectedElement,
+    selectedElements: store.selectedElements,
     project: { dir: store.dir, name: basename(store.dir), epoch: store.projectEpoch },
     port,
     mcpUrl: mcpUrl(),
@@ -305,28 +305,37 @@ function registerIpc(): void {
   handle('history', (_e, direction: 'undo' | 'redo') => store.travel(direction))
   handle('select', (_e, ids: FrameId[]) => {
     store.selection = z.array(frameIdSchema).parse(ids).filter((id) => findFrame(store.doc, id))
-    store.selectedElement = null
-    send('element:selection', null)
+    store.selectedElements = []
+    send('element:selection', [])
     send('selection', store.selection)
   })
   handle('element:select', (_e, raw: unknown) => {
-    const input = z.object({ frameId: frameIdSchema, projectEpoch: z.number().int(), html: z.string(), hit: elementHitSchema.nullable() }).strict().parse(raw)
-    if (input.projectEpoch !== store.projectEpoch || store.selection.length !== 1 || store.selection[0] !== input.frameId) return
+    const input = z.object({ frameId: frameIdSchema, projectEpoch: z.number().int(), html: z.string(), hits: z.array(elementHitSchema).max(10000), mode: z.enum(['replace', 'add', 'toggle']) }).strict().parse(raw)
+    if (input.projectEpoch !== store.projectEpoch) return
     const frame = findFrame(store.doc, input.frameId)
     if (frame?.kind !== 'html' || frame.html !== input.html) return
-    store.selectedElement = input.hit && selectedElement(frame, input.hit)
-    send('element:selection', store.selectedElement)
+    const incoming = selectedElements(frame, input.hits)
+    const next = input.mode !== 'replace' && store.selectedElements[0]?.frameId === frame.id ? [...store.selectedElements] : []
+    for (const hit of incoming) {
+      const index = next.findIndex((picked) => samePath(picked.path, hit.path))
+      if (index < 0) next.push(hit)
+      else if (input.mode === 'toggle') next.splice(index, 1)
+    }
+    store.selection = [frame.id]
+    store.selectedElements = next
+    send('selection', store.selection)
+    send('element:selection', next)
   })
   handle('element:delete', (_e, raw: unknown) => {
     const epoch = z.number().int().parse(raw)
-    const picked = store.selectedElement
-    if (epoch !== store.projectEpoch || !picked) return
-    const frame = findFrame(store.doc, picked.frameId)
+    const picked = store.selectedElements
+    if (epoch !== store.projectEpoch || !picked.length) return
+    const frame = findFrame(store.doc, picked[0].frameId)
     if (frame?.kind !== 'html') return
-    const html = removeElement(frame, picked.path)
-    store.selectedElement = null
-    send('element:selection', null)
-    if (html !== null) store.dispatch({ type: 'patch', id: frame.id, patch: { html } })
+    const html = removeElements(frame, picked.map((element) => element.path))
+    store.selectedElements = []
+    send('element:selection', [])
+    store.dispatch({ type: 'patch', id: frame.id, patch: { html } })
   })
   handle('browser', async (_e, action: string, arg?: unknown) => {
     switch (action) {
@@ -364,7 +373,7 @@ function registerIpc(): void {
       const resolved = style ? loadStyle({ name: style.id, variant: style.variant }) : null
       if (style && resolved?.id !== style.id) throw new Error('Style attachments require a canonical style ID from the catalog.')
       const selectedFrames = store.selection.flatMap((id) => findFrame(store.doc, id) ?? [])
-      void agent.send(text, { selectedFrames, selectedElement: store.selectedElement, browserPick: store.browserPick, browserUrl: browser.state().url, style: resolved }, model)
+      void agent.send(text, { selectedFrames, selectedElements: store.selectedElements, browserPick: store.browserPick, browserUrl: browser.state().url, style: resolved }, model)
     } catch (error) {
       send('agent:event', { type: 'error', text: `Invalid style or message: ${error instanceof Error ? error.message : String(error)}` })
     }
@@ -471,7 +480,7 @@ app.whenReady().then(async () => {
   store.on('change', (doc) => {
     for (const f of doc.frames) if (f.kind === 'html') notePhotoUse(photoKeys(), f.html)
     send('doc', doc)
-    send('element:selection', store.selectedElement)
+    send('element:selection', store.selectedElements)
     send('selection', store.selection)
   })
   browser.on('state', (s) => {

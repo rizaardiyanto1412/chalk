@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { EXPORT_FORMATS, type Doc, type Frame, type FrameId, type HtmlFrame, type SelectedElement } from '../../shared/model'
+import { contains, intersects, samePath, unionRect, type ElementHit, type ElementRect, type ElementSelectionMode } from '../../shared/elementSelection'
 import { frameSize, translated } from '../../shared/frameGeometry'
 import { api } from './api'
 import { nativeEditing, selectedText } from './editFocus'
@@ -14,8 +15,9 @@ interface Camera {
 
 type Gesture =
   | { kind: 'idle' }
+  | { kind: 'marquee'; sx: number; sy: number; moved: boolean }
   | { kind: 'pan'; sx: number; sy: number; cam: Camera }
-  | { kind: 'move'; frames: Frame[]; id: FrameId; sx: number; sy: number; dx: number; dy: number; moved: boolean; collapse: boolean; pick: { x: number; y: number } | null }
+  | { kind: 'move'; frames: Frame[]; id: FrameId; sx: number; sy: number; dx: number; dy: number; moved: boolean; collapse: boolean; pick: { x: number; y: number; mode: ElementSelectionMode } | null }
   | { kind: 'nudge'; frames: Frame[]; dx: number; dy: number; keys: Set<string> }
   | { kind: 'resize'; id: FrameId; sx: number; sy: number; w: number; h: number }
 
@@ -34,37 +36,59 @@ interface Props {
   port: number
   projectEpoch: number
   selection: FrameId[]
-  selectedElement: SelectedElement | null
+  selectedElements: SelectedElement[]
   onSelect: (ids: FrameId[]) => void
   onZoom: (zoom: number) => void
   tool: CanvasTool
   exportBusy: boolean
 }
 
+type MarqueePreview =
+  | { kind: 'frames'; ids: FrameId[] }
+  | { kind: 'elements'; hits: (ElementHit & { frameId: FrameId })[] }
+
+function marqueeTarget(frames: Frame[], rect: ElementRect) {
+  const enclosed = frames.filter((frame) => contains(rect, frame))
+  if (enclosed.length) return { kind: 'frames' as const, ids: enclosed.map((frame) => frame.id) }
+  const overlapping = frames.filter((frame) => intersects(rect, frame))
+  const frame = overlapping[0]
+  if (overlapping.length !== 1 || frame.kind !== 'html') return { kind: 'frames' as const, ids: overlapping.map((frame) => frame.id) }
+  const x = Math.max(rect.x, frame.x)
+  const y = Math.max(rect.y, frame.y)
+  return { kind: 'elements' as const, frame, rect: { x: x - frame.x, y: y - frame.y, width: Math.min(rect.x + rect.width, frame.x + frame.width) - x, height: Math.min(rect.y + rect.height, frame.y + frame.height) - y } }
+}
+
 const MIN_ZOOM = 0.05
 const MAX_ZOOM = 4
 const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
 
-export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, port, projectEpoch, selection, selectedElement, onSelect, onZoom, tool, exportBusy }, ref) {
+export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, port, projectEpoch, selection, selectedElements, onSelect, onZoom, tool, exportBusy }, ref) {
   const host = useRef<HTMLDivElement>(null)
   const [cam, setCam] = useState<Camera>({ x: 80, y: 80, zoom: 0.5 })
+  const elements = useCanvasElements(doc, selectedElements, projectEpoch)
+  const marqueeVersion = useRef(0)
+  const [marqueeRect, setMarqueeRect] = useState<ElementRect | null>(null)
+  const [marqueePreview, setMarqueePreview] = useState<MarqueePreview | null>(null)
   const gesture = useRef<Gesture>({ kind: 'idle' })
-  const [pointerMode, setPointerMode] = useState<'idle' | 'pan' | 'move' | 'resize'>('idle')
+  const [pointerMode, setPointerMode] = useState<'idle' | 'pan' | 'move' | 'resize' | 'marquee'>('idle')
   const [draft, setDraft] = useState<Draft>({})
   const draftRef = useRef<Draft>({})
   const preview = (next: Draft) => { draftRef.current = next; setDraft(next) }
   const cancelGesture = useCallback(() => {
+    marqueeVersion.current++
+    elements.cancelMarquee()
+    setMarqueeRect(null)
+    setMarqueePreview(null)
     gesture.current = { kind: 'idle' }
     setPointerMode('idle')
     draftRef.current = {}
     setDraft({})
-  }, [])
+  }, [elements.cancelMarquee])
   const [space, setSpace] = useState(false)
   const [live, setLive] = useState<FrameId | null>(null)
   const [cmd, setCmd] = useState(false)
-  const elements = useCanvasElements(doc, selectedElement, projectEpoch)
-  const elementRef = useRef(selectedElement)
-  elementRef.current = selectedElement
+  const elementRef = useRef(selectedElements)
+  elementRef.current = selectedElements
   const pointer = useRef<{ frameId: FrameId; x: number; y: number } | null>(null)
   const hoverAtPointer = (enabled: boolean) => {
     const point = pointer.current
@@ -181,16 +205,16 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
       else if (e.key === 'Backspace' || e.key === 'Delete') {
         cancelGesture()
         e.preventDefault()
-        if (picked) void api.deleteElement(projectEpoch)
+        if (picked.length) void api.deleteElements(projectEpoch)
         else void api.frameCommand({ type: 'delete' })
       } else if (e.key === 'Escape') {
         cancelGesture()
         setLive(null)
         elements.clearHover()
-        if (picked) {
-          const frame = doc.frames.find((f) => f.id === picked.frameId)
-          if (frame?.kind === 'html' && picked.path.length > 1) elements.request(frame, 'select', { path: picked.path.slice(0, -1) })
-          else if (frame?.kind === 'html') void api.selectElement(frame, projectEpoch, null)
+        if (picked.length) {
+          const frame = doc.frames.find((f) => f.id === picked[0].frameId)
+          if (frame?.kind === 'html' && picked.length === 1 && picked[0].path.length > 1) void elements.request(frame, 'select', { path: picked[0].path.slice(0, -1) })
+          else if (frame?.kind === 'html') void api.selectElements(frame, projectEpoch, [])
         } else onSelect([])
       } else if ((e.metaKey && e.key === '0') || (e.shiftKey && e.key === '!')) {
         e.preventDefault()
@@ -220,7 +244,7 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
       window.removeEventListener('keydown', down)
       window.removeEventListener('keyup', up)
     }
-  }, [selection, onSelect, fit, fitRect, doc.frames, zoomBy, projectEpoch, cancelGesture, selectedElement, elements.request, elements.clearHover, space, tool, live])
+  }, [selection, onSelect, fit, fitRect, doc.frames, zoomBy, projectEpoch, cancelGesture, selectedElements, elements.request, elements.clearHover, space, tool, live])
 
   useEffect(() => api.on.edit((command) => {
     cancelGesture()
@@ -250,13 +274,16 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
     window.getSelection()?.removeAllRanges()
     ;(frameEl ?? host.current)?.setPointerCapture(e.pointerId)
     const panTool = space || tool === 'hand'
-    if (panTool || e.button === 1 || !frameEl) {
+    if (panTool || e.button === 1) {
       gesture.current = { kind: 'pan', sx: e.clientX, sy: e.clientY, cam }
       setPointerMode('pan')
-      if (!panTool && e.button === 0 && !frameEl) {
-        onSelect([])
-        setLive(null)
-      }
+      return
+    }
+    if (!frameEl) {
+      gesture.current = { kind: 'marquee', sx: e.clientX, sy: e.clientY, moved: false }
+      setPointerMode('marquee')
+      setLive(null)
+      elements.clearHover()
       return
     }
     const f = doc.frames.find((fr) => fr.id === frameEl.dataset.frameId)
@@ -268,18 +295,39 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
       return
     }
     if (live === id && !target.closest('[data-label]')) return
-    if (e.shiftKey && selection.includes(id)) {
+    const toggleElement = e.shiftKey && selectedElements[0]?.frameId === id && !target.closest('[data-label]')
+    if (e.shiftKey && !toggleElement && selection.includes(id)) {
       onSelect(selection.filter((selected) => selected !== id))
       return
     }
-    const ids = e.metaKey && !target.closest('[data-label]') ? [id] : e.shiftKey ? [...selection, id] : selection.includes(id) ? selection : [id]
+    const ids = e.metaKey && !target.closest('[data-label]') ? [id] : e.shiftKey && !toggleElement ? [...selection, id] : selection.includes(id) ? selection : [id]
     if (ids.length !== selection.length || ids.some((id, i) => id !== selection[i])) onSelect(ids)
     const box = frameEl.getBoundingClientRect()
-    const pick = f.kind === 'html' && !e.shiftKey && !target.closest('[data-label]') && (e.metaKey || selection.length === 1 && selection[0] === id)
-      ? { x: (e.clientX - box.left) / cam.zoom, y: (e.clientY - box.top) / cam.zoom } : null
+    const pick: Extract<Gesture, { kind: 'move' }>['pick'] = f.kind === 'html' && !target.closest('[data-label]') && (toggleElement || !e.shiftKey && (e.metaKey || selection.length === 1 && selection[0] === id))
+      ? { x: (e.clientX - box.left) / cam.zoom, y: (e.clientY - box.top) / cam.zoom, mode: toggleElement ? 'toggle' : 'replace' } : null
     elements.clearHover()
     gesture.current = { kind: 'move', id, frames: doc.frames.filter((f) => ids.includes(f.id)), sx: e.clientX, sy: e.clientY, dx: 0, dy: 0, moved: false, collapse: !e.shiftKey, pick }
     setPointerMode('move')
+  }
+
+  const dragRect = (g: Extract<Gesture, { kind: 'marquee' }>, e: React.PointerEvent): ElementRect => {
+    const box = host.current!.getBoundingClientRect()
+    return { x: (Math.min(g.sx, e.clientX) - box.left - cam.x) / cam.zoom, y: (Math.min(g.sy, e.clientY) - box.top - cam.y) / cam.zoom, width: Math.abs(e.clientX - g.sx) / cam.zoom, height: Math.abs(e.clientY - g.sy) / cam.zoom }
+  }
+
+  const previewMarquee = async (rect: ElementRect, add: boolean) => {
+    const version = ++marqueeVersion.current
+    const target = marqueeTarget(doc.frames, rect)
+    setMarqueeRect(rect)
+    if (target.kind === 'frames') {
+      elements.cancelMarquee()
+      setMarqueePreview({ kind: 'frames', ids: [...new Set([...(add && !selectedElements.length ? selection : []), ...target.ids])] })
+    } else {
+      const hits = await elements.marquee(target.frame, target.rect)
+      if (!hits || version !== marqueeVersion.current) return
+      const base = add && selectedElements[0]?.frameId === target.frame.id ? selectedElements : []
+      setMarqueePreview({ kind: 'elements', hits: [...base, ...hits.filter((hit) => !base.some((picked) => samePath(picked.path, hit.path))).map((hit) => ({ ...hit, frameId: target.frame.id }))] })
+    }
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -293,7 +341,11 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
         hoverAtPointer(selection.includes(frame.id) || e.metaKey || cmd)
       } else { pointer.current = null; elements.clearHover() }
     }
-    if (g.kind === 'pan') setCam({ ...g.cam, x: g.cam.x + e.clientX - g.sx, y: g.cam.y + e.clientY - g.sy })
+    if (g.kind === 'marquee') {
+      if (!g.moved && Math.hypot(e.clientX - g.sx, e.clientY - g.sy) < 3) return
+      g.moved = true
+      void previewMarquee(dragRect(g, e), e.shiftKey)
+    } else if (g.kind === 'pan') setCam({ ...g.cam, x: g.cam.x + e.clientX - g.sx, y: g.cam.y + e.clientY - g.sy })
     else if (g.kind === 'move') {
       const dx = (e.clientX - g.sx) / cam.zoom
       const dy = (e.clientY - g.sy) / cam.zoom
@@ -307,13 +359,27 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
     }
   }
 
-  const onPointerUp = () => {
+  const onPointerUp = (e: React.PointerEvent) => {
     const g = gesture.current
+    if (g.kind === 'marquee') {
+      const target = marqueeTarget(doc.frames, dragRect(g, e))
+      cancelGesture()
+      if (!g.moved) { onSelect([]); return }
+      if (target.kind === 'frames') onSelect([...new Set([...(e.shiftKey && !selectedElements.length ? selection : []), ...target.ids])])
+      else {
+        const version = marqueeVersion.current
+        const mode = e.shiftKey ? 'add' : 'replace'
+        void elements.marquee(target.frame, target.rect).then((hits) => {
+          if (hits && version === marqueeVersion.current) void api.selectElements(target.frame, projectEpoch, hits, mode)
+        })
+      }
+      return
+    }
     if (g.kind === 'move') {
       if (g.moved) void api.frameCommand({ type: 'arrange', ids: g.frames.map((f) => f.id), projectEpoch, operation: { kind: 'translate', dx: g.dx, dy: g.dy } })
       else if (g.pick) {
         const frame = doc.frames.find((f) => f.id === g.id)
-        if (frame?.kind === 'html') elements.request(frame, 'select', g.pick)
+        if (frame?.kind === 'html') void elements.request(frame, 'select', g.pick, g.pick.mode)
       } else if (g.collapse) onSelect([g.id])
     } else if (g.kind === 'resize') {
       const patch = draftRef.current[g.id]
@@ -322,6 +388,13 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
     cancelGesture()
   }
 
+  const displayedHits = marqueePreview ? marqueePreview.kind === 'elements' ? marqueePreview.hits : [] : selectedElements
+  const union = unionRect(displayedHits.map((hit) => hit.rect))
+  const outlineHits = [
+    ...(elements.hovered ? [{ kind: 'hover', hit: elements.hovered }] : []),
+    ...displayedHits.map((hit) => ({ kind: 'selected', hit })),
+    ...(displayedHits.length > 1 && union ? [{ kind: 'union', hit: { ...displayedHits[0], path: [], rect: union } }] : [])
+  ]
   const selected = doc.frames.filter((f) => selection.includes(f.id))
   const panning = pointerMode === 'pan'
   const pointerGesture = pointerMode !== 'idle'
@@ -350,7 +423,7 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
       onPointerLeave={() => { pointer.current = null; elements.clearHover() }}
       onPointerUp={onPointerUp}
       onPointerCancel={cancelGesture}
-      onLostPointerCapture={() => { if (gesture.current.kind !== 'nudge') cancelGesture() }}
+      onLostPointerCapture={() => { if (gesture.current.kind !== 'idle' && gesture.current.kind !== 'nudge') cancelGesture() }}
       onDoubleClick={(e) => {
         const id = (e.target as HTMLElement).closest<HTMLElement>('[data-frame-id]')?.dataset.frameId as FrameId | undefined
         if (id && doc.frames.find((f) => f.id === id)?.kind === 'html') { setLive(id); onSelect([id]); elements.clearHover() }
@@ -362,7 +435,7 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
           const box = { ...f, ...draft[f.id] }
           const isSel = selection.includes(f.id)
           return (
-            <div key={f.id} data-frame-id={f.id} className={`frame ${isSel ? 'is-selected' : ''} ${live === f.id ? 'is-live' : ''}`} style={{ left: box.x, top: box.y, width: box.width, height: box.height }}>
+            <div key={f.id} data-frame-id={f.id} className={`frame ${isSel ? 'is-selected' : ''} ${live === f.id ? 'is-live' : ''} ${marqueePreview?.kind === 'frames' && marqueePreview.ids.includes(f.id) ? 'is-marquee-preview' : ''}`} style={{ left: box.x, top: box.y, width: box.width, height: box.height }}>
               <div className="frame-label" data-label>
                 <Icon name={f.kind === 'image' ? 'image' : 'frame'} size={12} />
                 <span>{f.name}</span>
@@ -380,20 +453,22 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
         })}
       </div>
 
-      {[{ kind: 'hover', hit: elements.hovered }, { kind: 'selected', hit: selectedElement }].map(({ kind, hit }) => {
+      {outlineHits.map(({ kind, hit }) => {
         const frame = hit && doc.frames.find((f) => f.id === hit.frameId)
         if (!hit || !frame || live === frame.id || kind === 'hover' && (space || tool === 'hand' || pointerGesture)) return null
         const box = { ...frame, ...draft[frame.id] }
         const { rect } = hit
-        return <div key={kind} className={`element-outline is-${kind}`} data-element-path={hit.path.join('/')} style={{ left: cam.x + (box.x + rect.x) * cam.zoom, top: cam.y + (box.y + rect.y) * cam.zoom, width: rect.width * cam.zoom, height: rect.height * cam.zoom }}>
-          {kind === 'selected' && <>
+        return <div key={`${kind}:${hit.path.join('/')}`} className={`element-outline is-${kind}`} data-element-path={hit.path.join('/')} style={{ left: cam.x + (box.x + rect.x) * cam.zoom, top: cam.y + (box.y + rect.y) * cam.zoom, width: rect.width * cam.zoom, height: rect.height * cam.zoom }}>
+          {(kind === 'union' || kind === 'selected' && displayedHits.length === 1) && <>
             {['tl', 'tr', 'bl', 'br'].map((corner) => <span key={corner} className={`element-handle ${corner}`} />)}
             <span className="element-size">{Math.round(rect.width)} × {Math.round(rect.height)}</span>
           </>}
         </div>
       })}
 
-      {selected.length === 1 && !draft[selected[0].id] && (
+      {marqueeRect && <div className="canvas-marquee" style={{ left: cam.x + marqueeRect.x * cam.zoom, top: cam.y + marqueeRect.y * cam.zoom, width: marqueeRect.width * cam.zoom, height: marqueeRect.height * cam.zoom }} />}
+
+      {selected.length === 1 && pointerMode !== 'marquee' && !draft[selected[0].id] && (
         <FrameToolbar key={selected[0].id} frame={selected[0]} cam={cam} live={live === selected[0].id} busy={exportBusy} onLive={(on) => setLive(on ? selected[0].id : null)} onDelete={() => onSelect([])} />
       )}
 

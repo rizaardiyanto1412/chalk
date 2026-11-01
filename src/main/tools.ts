@@ -118,7 +118,7 @@ export const TOOLS: Tool[] = [
         project: ctx.store.dir,
         frames: ctx.store.doc.frames.map(frameSummary),
         selectedFrameIds: ctx.store.selection,
-        selectedElement: ctx.store.selectedElement,
+        selectedElements: ctx.store.selectedElements,
         browserPick: ctx.store.browserPick
       })
     ]

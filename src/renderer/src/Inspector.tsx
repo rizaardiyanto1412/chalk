@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Alignment, Arrangement, Frame, GeometryField, Stacking, SelectedElement } from '../../shared/model'
 import { FRAME_LIMITS, geometryValue } from '../../shared/frameGeometry'
+import { unionRect } from '../../shared/elementSelection'
 import { api } from './api'
 
 const fields: { field: GeometryField; label: string }[] = [
@@ -17,16 +18,18 @@ const stacking: { direction: Stacking; label: string }[] = [
   { direction: 'forward', label: 'Bring forward' }, { direction: 'backward', label: 'Send backward' }
 ]
 
-export function Inspector({ frames, projectEpoch, selectedElement }: { frames: Frame[]; projectEpoch: number; selectedElement: SelectedElement | null }) {
+export function Inspector({ frames, projectEpoch, selectedElements }: { frames: Frame[]; projectEpoch: number; selectedElements: SelectedElement[] }) {
+  const element = selectedElements[0]
+  const rect = unionRect(selectedElements.map((picked) => picked.rect))
   const arrange = (operation: Arrangement) => {
     void api.frameCommand({ type: 'arrange', ids: frames.map((f) => f.id), projectEpoch, operation })
   }
   return (
     <section className="frame-inspector" aria-label="Frame geometry and arrangement">
-      {selectedElement && <div className="element-inspector" aria-label="Selected element">
-        <strong>&lt;{selectedElement.tag}&gt;</strong>
-        <span>{selectedElement.text || 'Element'}</span>
-        <span>{Math.round(selectedElement.rect.width)} × {Math.round(selectedElement.rect.height)} px</span>
+      {element && rect && <div className="element-inspector" aria-label="Selected element">
+        <strong>{selectedElements.length > 1 ? `${selectedElements.length} elements` : `<${element.tag}>`}</strong>
+        {selectedElements.length === 1 && <span>{element.text || 'Element'}</span>}
+        <span>{Math.round(rect.width)} × {Math.round(rect.height)} px</span>
       </div>}
       <div className="inspector-title">{frames.length ? `${frames.length} selected` : 'Select frames to edit'}</div>
       <div className="geometry-fields">

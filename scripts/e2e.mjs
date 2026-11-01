@@ -15,6 +15,7 @@ import { checkBrowserDevices, checkBrowserDevicePreference } from './browser-dev
 import { checkStyles } from './styles-e2e.mjs'
 import { checkArrangement } from './arrangement-e2e.mjs'
 import { checkElements } from './elements-e2e.mjs'
+import { checkMarquee } from './marquee-e2e.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const artifacts = process.env.CHALK_E2E_ARTIFACTS || join(root, 'e2e-artifacts')
@@ -518,6 +519,7 @@ const framesClient = await mcp()
 await checkFrames({ app, win, client: framesClient, call, json, check, project, artifacts })
 await checkArrangement({ app, win, client: framesClient, call, json, check, project, artifacts })
 await checkElements({ app, win, client: framesClient, call, json, check, project, artifacts, fakeLog })
+await checkMarquee({ app, win, client: framesClient, call, json, check, project, artifacts, fakeLog })
 await checkBrowserDevices({ app, win, client: framesClient, call, json, check, artifacts })
 await framesClient.close()
 await app.close()

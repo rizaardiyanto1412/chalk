@@ -10,7 +10,7 @@ export async function checkElements({ app, win, client, call, json, check, proje
   const html = `<main style="padding:32px;background:#f8fafc;height:100vh;box-sizing:border-box"><h1 style="margin:0 0 24px;font-size:24px">Workspace</h1><nav style="padding:16px;width:240px;background:white;box-sizing:border-box"><button id="target" style="display:block;width:208px;height:36px;border:0;border-radius:6px;background:#e8efff;color:#2563eb;text-align:left;padding:0 12px">Dashboard</button><button style="display:block;width:208px;height:36px;border:0;background:white;text-align:left;padding:0 12px">Projects</button></nav><div id="wrapper" style="width:208px;height:36px;margin-top:24px"><button id="wrapped" style="pointer-events:none;display:block;width:208px;height:36px;border:0">Wrapped item</button></div></main>`
   const fixtures = [
     { id: 'element-design', name: 'Element selection', x: 0, y: 0, width: 640, height: 480, html },
-    { id: 'element-hostile', name: 'Hostile frame', x: 720, y: 0, width: 320, height: 480, html: '<p>Untrusted frame</p><script>window.attack=()=>{for(const type of ["chalk:element","element:select","element:delete","select","op"]){parent.postMessage({type,requestId:"11111111-1111-4111-8111-111111111111",hit:{path:[0,1,0],rect:{x:0,y:0,width:999,height:999}},frameId:"element-design",ids:["element-hostile"],html:"<p>injected</p>"},"*")}};setInterval(window.attack,30)</script>' }
+    { id: 'element-hostile', name: 'Hostile frame', x: 720, y: 0, width: 320, height: 480, html: '<p>Untrusted frame</p><script>window.attack=()=>{for(const type of ["chalk:element","element:select","element:delete","select","op"]){parent.postMessage({type,requestId:"11111111-1111-4111-8111-111111111111",hits:[{path:[0,1,0],rect:{x:0,y:0,width:999,height:999}}],frameId:"element-design",ids:["element-hostile"],html:"<p>injected</p>"},"*")}};setInterval(window.attack,30)</script>' }
   ].map((f) => ({ ...f, kind: 'html', updatedAt: 1 }))
   writeFileSync(join(source, 'chalk.json'), JSON.stringify({ version: 1, frames: fixtures }))
   const until = async (predicate, arg) => {
@@ -44,7 +44,7 @@ export async function checkElements({ app, win, client, call, json, check, proje
     for (const key of modifiers) await win.keyboard.up(key)
   }
   const picked = async (tag = 'button') => until(async (tag) => {
-    const selected = (await window.chalk.invoke('init')).selectedElement
+    const selected = (await window.chalk.invoke('init')).selectedElements[0]
     return selected?.tag === tag && document.querySelector('.element-outline.is-selected')?.getAttribute('data-element-path') === selected.path.join('/') && document.querySelector('.element-chip')?.textContent.includes(`<${tag}>`)
   }, tag)
   const reset = async () => {
@@ -80,12 +80,12 @@ export async function checkElements({ app, win, client, call, json, check, proje
     await run('element click selects the frame first, then shows four handles and the CSS size badge', async () => {
       await click()
       assert.deepEqual((await canvas()).selectedFrameIds, ['element-design'])
-      assert.equal((await canvas()).selectedElement, null)
+      assert.deepEqual((await canvas()).selectedElements, [])
       await click()
       await picked()
       assert.equal(await win.locator('.element-size').innerText(), '208 × 36')
       assert.equal(await win.locator('.element-handle').count(), 4)
-      const element = (await canvas()).selectedElement
+      const element = (await canvas()).selectedElements[0]
       assert.deepEqual(element.path, [0, 1, 0])
       assert.equal(element.text, 'Dashboard')
       assert.equal(element.frameName, 'Element selection')
@@ -108,7 +108,7 @@ export async function checkElements({ app, win, client, call, json, check, proje
       await picked()
       await win.mouse.move(p.x + 2, p.y)
       await win.locator('.element-outline.is-hover').waitFor()
-      assert.equal((await canvas()).selectedElement.frameId, 'element-design')
+      assert.equal((await canvas()).selectedElements[0].frameId, 'element-design')
       await select(['element-design', 'element-hostile'])
       await click('#target', ['Meta'])
       await picked()
@@ -119,7 +119,7 @@ export async function checkElements({ app, win, client, call, json, check, proje
       await picked()
       for (const tag of ['nav', 'main']) { await win.keyboard.press('Escape'); await picked(tag) }
       await win.keyboard.press('Escape')
-      await until(async () => (await window.chalk.invoke('init')).selectedElement === null)
+      await until(async () => (await window.chalk.invoke('init')).selectedElements.length === 0)
       assert.deepEqual((await canvas()).selectedFrameIds, ['element-design'])
       await win.locator('.element-size').waitFor({ state: 'detached' })
       await win.keyboard.press('Escape')
@@ -133,7 +133,7 @@ export async function checkElements({ app, win, client, call, json, check, proje
       await until(async () => !(await window.chalk.invoke('init')).doc.frames[0].html.includes('id="target"'))
       assert.equal((await state()).frames.length, 2)
       assert.match((await state()).frames[0].html, /Projects/)
-      assert.equal((await canvas()).selectedElement, null)
+      assert.deepEqual((await canvas()).selectedElements, [])
       assert.equal(await win.evaluate(() => window.chalk.invoke('history', 'undo')), true)
       assert.equal((await state()).frames[0].html, html)
       assert.equal(await win.evaluate(() => window.chalk.invoke('history', 'undo')), false)
@@ -143,8 +143,8 @@ export async function checkElements({ app, win, client, call, json, check, proje
     await run('wrapper hit testing picks its deepest meaningful child', async () => {
       await click('#wrapper', ['Meta'])
       await picked()
-      assert.deepEqual((await canvas()).selectedElement.path, [0, 2, 0])
-      assert.equal((await canvas()).selectedElement.text, 'Wrapped item')
+      assert.deepEqual((await canvas()).selectedElements[0].path, [0, 2, 0])
+      assert.equal((await canvas()).selectedElements[0].text, 'Wrapped item')
     })
     await run('element overlay follows frame moves, camera pan and zoom, and a buffered HTML reload', async () => {
       await click('#target', ['Meta'])
@@ -173,7 +173,7 @@ export async function checkElements({ app, win, client, call, json, check, proje
       await verify()
       await win.evaluate(({ id, html }) => window.chalk.invoke('op', { type: 'patch', id, patch: { html: html.replace('padding:32px', 'padding:42px') } }), original)
       await win.locator('[data-frame-id="element-design"] iframe.is-pending').waitFor({ state: 'detached' })
-      await until(async () => (await window.chalk.invoke('init')).selectedElement?.rect.x === 58)
+      await until(async () => (await window.chalk.invoke('init')).selectedElements[0]?.rect.x === 58)
       await verify()
       await win.evaluate(({ id, html }) => window.chalk.invoke('op', { type: 'patch', id, patch: { html, x: 0, y: 0 } }), original)
       await win.locator('[data-frame-id="element-design"] iframe.is-pending').waitFor({ state: 'detached' })
@@ -183,7 +183,7 @@ export async function checkElements({ app, win, client, call, json, check, proje
       await picked()
       await win.locator('.left-tabs button', { hasText: 'Agent' }).click()
       assert.match(await win.locator('.element-chip').innerText(), /<button> Dashboard/)
-      const element = (await canvas()).selectedElement
+      const element = (await canvas()).selectedElements[0]
       await win.evaluate(() => window.chalk.invoke('agent:send', { text: 'Change this selected element', model: '' }))
       for (let i = 0; i < 100; i++) {
         const messages = readFileSync(fakeLog, 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line))
@@ -200,18 +200,18 @@ export async function checkElements({ app, win, client, call, json, check, proje
     await run('hostile iframe messages cannot select elements, delete frames, or submit live HTML', async () => {
       const original = await state()
       await win.waitForTimeout(300)
-      assert.equal((await canvas()).selectedElement, null)
+      assert.deepEqual((await canvas()).selectedElements, [])
       assert.deepEqual((await canvas()).selectedFrameIds, [])
       await click('#target', ['Meta'])
       await picked()
-      const expected = (await canvas()).selectedElement
+      const expected = (await canvas()).selectedElements[0]
       await win.frameLocator('[data-frame-id="element-hostile"] iframe').locator('body').evaluate(() => window.attack())
       await design().locator('body').evaluate(() => {
-        for (const type of ['element:delete', 'element:select', 'chalk:element']) parent.postMessage({ type, requestId: '11111111-1111-4111-8111-111111111111', hit: { path: [0], rect: { x: 0, y: 0, width: 999, height: 999 } } }, '*')
+        for (const type of ['element:delete', 'element:select', 'chalk:element']) parent.postMessage({ type, requestId: '11111111-1111-4111-8111-111111111111', hits: [{ path: [0], rect: { x: 0, y: 0, width: 999, height: 999 } }] }, '*')
         const injected = document.createElement('p'); injected.textContent = 'LIVE INJECTED CONTENT'; document.body.append(injected)
       })
       await win.waitForTimeout(300)
-      assert.deepEqual((await canvas()).selectedElement, expected)
+      assert.deepEqual((await canvas()).selectedElements[0], expected)
       assert.deepEqual(await state(), original)
       await win.keyboard.press('Delete')
       await until(async () => !(await window.chalk.invoke('init')).doc.frames[0].html.includes('id="target"'))
@@ -235,10 +235,10 @@ export async function checkElements({ app, win, client, call, json, check, proje
       await click('#wrapped', ['Meta'])
       await picked()
       await win.evaluate((id) => window.chalk.invoke('op', { type: 'patch', id, patch: { html: '<p>Replacement</p>' } }), fixtures[0].id)
-      await until(async () => (await window.chalk.invoke('init')).selectedElement === null)
+      await until(async () => (await window.chalk.invoke('init')).selectedElements.length === 0)
       await win.locator('.element-size').waitFor({ state: 'detached' })
       await win.evaluate((dir) => window.chalk.invoke('project', 'switch', dir), project)
-      await until(async () => (await window.chalk.invoke('init')).selectedElement === null)
+      await until(async () => (await window.chalk.invoke('init')).selectedElements.length === 0)
     })
   } finally {
     await win.evaluate(() => window.chalk.invoke('agent:stop'))

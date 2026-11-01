@@ -23,7 +23,7 @@ export function findClaude(): string | null {
 
 export interface TurnContext {
   selectedFrames: Frame[]
-  selectedElement: SelectedElement | null
+  selectedElements: SelectedElement[]
   browserPick: BrowserPick | null
   browserUrl: string
   style: ResolvedStyle | null
@@ -33,7 +33,7 @@ export interface TurnContext {
 export function contextBlock(c: TurnContext): string {
   const lines: string[] = []
   if (c.selectedFrames.length) lines.push(`Selected frames: ${c.selectedFrames.map((f) => `"${f.name}" (id ${f.id}, ${f.kind})`).join(', ')}`)
-  if (c.selectedElement) lines.push(`Selected canvas element (path uses element child indexes from body, CSS pixel rect, stored HTML trimmed):\n${JSON.stringify(c.selectedElement)}`)
+  if (c.selectedElements.length) lines.push(`Selected canvas elements (path uses element child indexes from body, CSS pixel rect, stored HTML trimmed):\n${JSON.stringify(c.selectedElements)}`)
   const references = c.selectedFrames.filter((f) => f.kind === 'image')
   if (references.length) lines.push(`Selected image references: ${references.map((f) => f.id).join(', ')}. View each with screenshot_frame before designing.`)
   if (c.browserUrl && !c.browserUrl.startsWith('about:')) lines.push(`Built-in browser is on: ${c.browserUrl}`)

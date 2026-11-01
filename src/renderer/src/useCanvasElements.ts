@@ -1,79 +1,91 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Doc, FrameId, HtmlFrame, SelectedElement } from '../../shared/model'
-import { elementReplySchema, type ElementHit, type ElementRequest } from '../../shared/elementSelection'
+import { elementReplySchema, samePath, type ElementHit, type ElementRequest, type ElementQuery, type ElementSelectionMode, type ElementRect } from '../../shared/elementSelection'
 import { api } from './api'
 
-type Intent = 'hover' | 'select' | 'resolve'
+type Intent = 'hover' | 'select' | 'resolve' | 'marquee'
 interface Request {
   requestId: string
   frame: HtmlFrame
   node: HTMLIFrameElement
+  complete: (hits: ElementHit[] | null) => void
 }
 
-export function useCanvasElements(doc: Doc, selected: SelectedElement | null, projectEpoch: number) {
+export function useCanvasElements(doc: Doc, selected: SelectedElement[], projectEpoch: number) {
   const nodes = useRef(new Map<FrameId, HTMLIFrameElement>())
   const requests = useRef(new Map<Intent, Request>())
   const current = useRef({ doc, selected })
   current.current = { doc, selected }
   const [hovered, setHovered] = useState<(ElementHit & { frameId: FrameId }) | null>(null)
-  const request = useCallback((frame: HtmlFrame, intent: Intent, query: { x: number; y: number } | { path: number[] }) => {
-    const node = nodes.current.get(frame.id)
-    if (!node?.contentWindow) return
-    const requestId = crypto.randomUUID()
-    requests.current.set(intent, { requestId, frame, node })
-    const message: ElementRequest = 'path' in query ? { type: 'chalk:resolve', requestId, ...query } : { type: 'chalk:hit', requestId, ...query }
-    node.contentWindow.postMessage(message, '*')
+  const cancel = useCallback((intent: Intent) => {
+    requests.current.get(intent)?.complete(null)
+    requests.current.delete(intent)
   }, [])
-  const resolve = useCallback(() => {
+  const query = useCallback((frame: HtmlFrame, intent: Intent, message: ElementQuery): Promise<ElementHit[] | null> => {
+    cancel(intent)
+    const node = nodes.current.get(frame.id)
+    const target = node?.contentWindow
+    if (!node || !target) return Promise.resolve(null)
+    const requestId = crypto.randomUUID()
+    return new Promise((complete) => {
+      requests.current.set(intent, { requestId, frame, node, complete })
+      target.postMessage({ ...message, requestId } satisfies ElementRequest, '*')
+    })
+  }, [cancel])
+  const request = useCallback(async (frame: HtmlFrame, intent: 'hover' | 'select', point: { x: number; y: number } | { path: number[] }, mode: ElementSelectionMode = 'replace') => {
+    const hits = await query(frame, intent, 'path' in point ? { type: 'chalk:resolve', paths: [point.path] } : { type: 'chalk:hit', ...point })
+    if (!hits) return
+    if (intent === 'hover') setHovered(hits[0] ? { ...hits[0], frameId: frame.id } : null)
+    else await api.selectElements(frame, projectEpoch, hits, mode)
+  }, [query, projectEpoch])
+  const resolve = useCallback(async () => {
     const { doc, selected } = current.current
-    if (!selected) return
-    const frame = doc.frames.find((f) => f.id === selected.frameId)
-    if (frame?.kind === 'html') request(frame, 'resolve', { path: selected.path })
-  }, [request])
+    const frame = doc.frames.find((f) => f.id === selected[0]?.frameId)
+    if (frame?.kind !== 'html') return
+    const paths = JSON.stringify(selected.map((hit) => hit.path))
+    const hits = await query(frame, 'resolve', { type: 'chalk:resolve', paths: selected.map((hit) => hit.path) })
+    const latest = current.current.selected
+    if (!hits || hits.some((hit) => !selected.some((picked) => samePath(picked.path, hit.path))) || latest[0]?.frameId !== frame.id || JSON.stringify(latest.map((hit) => hit.path)) !== paths || JSON.stringify(hits) === JSON.stringify(latest.map(({ path, rect }) => ({ path, rect })))) return
+    await api.selectElements(frame, projectEpoch, hits)
+  }, [query, projectEpoch])
+  const marquee = useCallback((frame: HtmlFrame, rect: ElementRect) => query(frame, 'marquee', { type: 'chalk:marquee', rect }), [query])
+  const cancelMarquee = useCallback(() => cancel('marquee'), [cancel])
   const register = useCallback((id: FrameId, node: HTMLIFrameElement | null) => {
     if (node) nodes.current.set(id, node)
     else {
       nodes.current.delete(id)
-      for (const [intent, pending] of requests.current) if (pending.frame.id === id) requests.current.delete(intent)
+      for (const [intent, pending] of requests.current) if (pending.frame.id === id) cancel(intent)
     }
-  }, [])
+  }, [cancel])
   const clearHover = useCallback(() => {
-    requests.current.delete('hover')
+    cancel('hover')
     setHovered(null)
-  }, [])
+  }, [cancel])
   useEffect(() => {
     const receive = (event: MessageEvent<unknown>) => {
-      const pending = [...requests.current].find(([, value]) => value.node.contentWindow === event.source && nodes.current.get(value.frame.id) === value.node)
-      if (!pending) return
+      if (![...requests.current.values()].some((value) => value.node.contentWindow === event.source && nodes.current.get(value.frame.id) === value.node)) return
       const parsed = elementReplySchema.safeParse(event.data)
       if (!parsed.success) return
       const match = [...requests.current].find(([, value]) => value.requestId === parsed.data.requestId && value.node.contentWindow === event.source && nodes.current.get(value.frame.id) === value.node)
       if (!match) return
-      const [intent, { frame }] = match
+      const [intent, pending] = match
       requests.current.delete(intent)
-      const latest = current.current.doc.frames.find((f) => f.id === frame.id)
-      if (latest?.kind !== 'html' || latest.html !== frame.html) return
-      const { hit } = parsed.data
-      if (intent === 'hover') setHovered(hit ? { ...hit, frameId: frame.id } : null)
-      else {
-        if (intent === 'resolve') {
-          const picked = current.current.selected
-          if (!picked || picked.frameId !== frame.id) return
-          if (hit && (JSON.stringify(hit.path) !== JSON.stringify(picked.path) || JSON.stringify(hit.rect) === JSON.stringify(picked.rect))) return
-        }
-        void api.selectElement(frame, projectEpoch, hit)
-      }
+      const latest = current.current.doc.frames.find((f) => f.id === pending.frame.id)
+      pending.complete(latest?.kind === 'html' && latest.html === pending.frame.html ? parsed.data.hits : null)
     }
     window.addEventListener('message', receive)
-    return () => window.removeEventListener('message', receive)
-  }, [projectEpoch])
-  const path = selected && JSON.stringify(selected.path)
+    return () => {
+      window.removeEventListener('message', receive)
+      for (const intent of requests.current.keys()) cancel(intent)
+    }
+  }, [cancel])
+  const paths = JSON.stringify(selected.map((hit) => hit.path))
   useEffect(() => {
-    requests.current.delete('resolve')
-    if (!selected) return
-    resolve()
-    const timer = window.setInterval(resolve, 200)
+    cancel('resolve')
+    if (!selected.length) return
+    void resolve()
+    const timer = window.setInterval(() => void resolve(), 200)
     return () => window.clearInterval(timer)
-  }, [selected?.frameId, path, resolve])
-  return { hovered, request, register, resolve, clearHover }
+  }, [selected[0]?.frameId, paths, resolve, cancel])
+  return { hovered, request, register, resolve, clearHover, marquee, cancelMarquee }
 }
