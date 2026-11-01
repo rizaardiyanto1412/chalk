@@ -178,12 +178,15 @@ body.is-resizing iframe { pointer-events: none; }
 .frame iframe, .frame > img { overflow: hidden; height: 100%; }
 .frame-label {
   position: absolute; left: 0; bottom: 100%; display: flex; align-items: center; gap: 5px; white-space: nowrap;
+  width: calc(100% * var(--zoom)); overflow: hidden;
   transform: scale(calc(1 / var(--zoom))); transform-origin: 0 100%; padding-bottom: 6px;
   font-size: 12px; font-weight: 500; color: var(--muted);
 }
+.frame-label > svg { flex-shrink: 0; }
+.frame-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .frame.is-selected .frame-label { color: var(--accent); }
-.frame-size { color: var(--faint); font-weight: 400; font-variant-numeric: tabular-nums; opacity: 0; transition: opacity .12s; }
-.frame:hover .frame-size, .frame.is-selected .frame-size { opacity: 1; }
+.frame-size { display: none; flex-shrink: 0; color: var(--faint); font-weight: 400; font-variant-numeric: tabular-nums; }
+.frame:hover .frame-size, .frame.is-selected .frame-size { display: block; }
 .frame-handle {
   position: absolute; right: 0; bottom: 0; width: 10px; height: 10px; background: #fff; border: 1.5px solid var(--accent); border-radius: 2px;
   transform: translate(50%, 50%) scale(calc(1 / var(--zoom))); cursor: nwse-resize;

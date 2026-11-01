@@ -476,9 +476,9 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
           const isSel = selection.includes(f.id)
           return (
             <div key={f.id} data-frame-id={f.id} className={`frame ${isSel ? 'is-selected' : ''} ${live === f.id ? 'is-live' : ''} ${marqueePreview?.kind === 'frames' && marqueePreview.ids.includes(f.id) ? 'is-marquee-preview' : ''}`} style={{ left: box.x, top: box.y, width: box.width, height: box.height }}>
-              <div className="frame-label" data-label>
+              <div className="frame-label" data-label title={f.name}>
                 <Icon name={f.kind === 'image' ? 'image' : 'frame'} size={12} />
-                <span>{f.name}</span>
+                <span className="frame-name">{f.name}</span>
                 <span className="frame-size">{box.width} × {box.height}</span>
               </div>
               {f.kind === 'html' ? (
