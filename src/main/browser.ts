@@ -110,7 +110,7 @@ export class Browser extends EventEmitter {
   private slot: Rectangle = { x: 0, y: 0, width: 0, height: 0 }
   private operations: Promise<unknown> = Promise.resolve()
 
-  constructor(device: BrowserDeviceId = 'responsive') {
+  constructor(device: BrowserDeviceId = 'desktop') {
     super()
     this.device = device
     this.view = new WebContentsView({ webPreferences: { partition: 'persist:chalk-browser', sandbox: true } })

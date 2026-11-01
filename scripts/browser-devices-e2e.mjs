@@ -196,7 +196,7 @@ export async function checkBrowserDevices({ app, win, client, call, json, check,
 export async function checkBrowserDevicePreference({ electron, root, project, artifacts, check }) {
   await check('viewport preference parses invalid saved values and restores the latest choice after restart', async () => {
     const profile = realpathSync(mkdtempSync(join(tmpdir(), 'chalk-device-preference-')))
-    writeFileSync(join(profile, 'config.json'), JSON.stringify({ projectDir: project, projects: [project], recentUrls: [], browserDevice: 'unknown-device' }))
+    writeFileSync(join(profile, 'config.json'), JSON.stringify({ projectDir: project, projects: [project], recentUrls: [], browserViewport: 'unknown-device' }))
     const launch = () => electron.launch({ args: [root, `--user-data-dir=${profile}`], cwd: root, env: { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !['ELECTRON_RUN_AS_NODE', 'CHALK_PROJECT_DIR'].includes(key))), CHALK_PORT: String((Number(process.env.CHALK_PORT) || 7911) + 2), ELECTRON_RENDERER_URL: '' } })
     let instance
     const init = async () => {
@@ -208,14 +208,14 @@ export async function checkBrowserDevicePreference({ electron, root, project, ar
     }
     try {
       let window = await init()
-      assert.equal(await window.getByLabel('Browser viewport').inputValue(), 'responsive')
+      assert.equal(await window.getByLabel('Browser viewport').inputValue(), 'desktop')
       await window.evaluate(() => window.chalk.invoke('browser', 'device', 'phone'))
-      assert.equal(JSON.parse(readFileSync(join(profile, 'config.json'), 'utf8')).browserDevice, 'phone')
+      assert.equal(JSON.parse(readFileSync(join(profile, 'config.json'), 'utf8')).browserViewport, 'phone')
       await instance.close()
       instance = undefined
       window = await init()
       assert.equal(await window.getByLabel('Browser viewport').inputValue(), 'phone')
-      writeFileSync(join(artifacts, 'browser-devices', 'preference.json'), JSON.stringify({ profile, restored: 'phone', invalidFallback: 'responsive' }, null, 2))
+      writeFileSync(join(artifacts, 'browser-devices', 'preference.json'), JSON.stringify({ profile, restored: 'phone', invalidFallback: 'desktop' }, null, 2))
     } finally {
       await instance?.close()
     }

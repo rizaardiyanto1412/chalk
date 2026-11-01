@@ -283,15 +283,29 @@ await check('browser_navigate loads a page and opens the browser panel', async (
   await win.waitForSelector('.browser-panel')
 })
 
-await check('the native browser view is visible and covers exactly the browser area', async () => {
+await check('the browser shows the desktop layout by default, scaled to fit the panel', async () => {
+  await win.waitForTimeout(300)
+  const slot = await win.locator('.browser-slot').boundingBox()
+  const view = await app.evaluate(async ({ BrowserWindow }) => {
+    const v = BrowserWindow.getAllWindows()[0].contentView.children[0]
+    return { visible: v.getVisible(), bounds: v.getBounds(), url: v.webContents.getURL(), cssWidth: await v.webContents.executeJavaScript('innerWidth') }
+  })
+  assert.ok(view.visible)
+  assert.equal(view.url, `${SITE}/`)
+  assert.equal(await win.getByLabel('Browser viewport').inputValue(), 'desktop')
+  assert.equal(view.cssWidth, 1440, 'page lays out at desktop width')
+  assert.ok(view.bounds.x >= slot.x - 1 && view.bounds.y >= slot.y - 1 && view.bounds.x + view.bounds.width <= slot.x + slot.width + 1 && view.bounds.y + view.bounds.height <= slot.y + slot.height + 1, 'scaled view stays inside the panel')
+})
+
+await check('the Responsive viewport covers exactly the browser area', async () => {
+  await call(client, 'browser_set_device', { device: 'responsive' })
   await win.waitForTimeout(300)
   const slot = await win.locator('.browser-slot').boundingBox()
   const view = await app.evaluate(({ BrowserWindow }) => {
     const v = BrowserWindow.getAllWindows()[0].contentView.children[0]
-    return { visible: v.getVisible(), bounds: v.getBounds(), url: v.webContents.getURL() }
+    return { visible: v.getVisible(), bounds: v.getBounds() }
   })
   assert.ok(view.visible)
-  assert.equal(view.url, `${SITE}/`)
   for (const k of ['x', 'y', 'width', 'height']) assert.ok(Math.abs(view.bounds[k] - slot[k]) <= 1, `${k}: view ${view.bounds[k]} vs slot ${slot[k]}`)
   await win.locator('[aria-label="Close browser"]').click()
   await win.waitForTimeout(200)

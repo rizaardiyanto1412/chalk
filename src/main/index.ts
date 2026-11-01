@@ -33,7 +33,8 @@ interface Config {
   /** Project folders open as tabs, in tab order. */
   projects: string[]
   recentUrls: string[]
-  browserDevice?: BrowserDeviceId
+  /** Browser viewport preset. Replaced the older browserDevice key so earlier saved "responsive" choices reset to desktop once. */
+  browserViewport?: BrowserDeviceId
   /** Optional stock photo API keys. Without them, photo search uses Wikimedia Commons. */
   photoKeys?: PhotoKeys
 }
@@ -44,7 +45,7 @@ const legacyConfigFile = () => join(app.getPath('appData'), 'Easel', 'config.jso
 function readConfig(): Config {
   try {
     const c = JSON.parse(readFileSync(existsSync(configFile()) ? configFile() : legacyConfigFile(), 'utf8'))
-    return { browserDevice: z.enum(BROWSER_DEVICE_IDS).catch('responsive').parse(c.browserDevice), projectDir: c.projectDir, projects: Array.isArray(c.projects) ? c.projects : [], recentUrls: Array.isArray(c.recentUrls) ? c.recentUrls : [], photoKeys: z.object({ unsplash: z.string().min(1).optional(), pexels: z.string().min(1).optional() }).catch({}).parse(c.photoKeys ?? {}) }
+    return { browserViewport: z.enum(BROWSER_DEVICE_IDS).catch('desktop').parse(c.browserViewport ?? 'desktop'), projectDir: c.projectDir, projects: Array.isArray(c.projects) ? c.projects : [], recentUrls: Array.isArray(c.recentUrls) ? c.recentUrls : [], photoKeys: z.object({ unsplash: z.string().min(1).optional(), pexels: z.string().min(1).optional() }).catch({}).parse(c.photoKeys ?? {}) }
   } catch {
     return { projects: [], recentUrls: [] }
   }
@@ -458,7 +459,7 @@ app.whenReady().then(async () => {
   store.open(first)
   updateConfig({ projectDir: first, projects: [...new Set([...config.projects.filter((p) => existsSync(p)), first])] })
 
-  browser = new Browser(config.browserDevice)
+  browser = new Browser(config.browserViewport)
   toolContext = {
     store,
     browser,
@@ -484,7 +485,7 @@ app.whenReady().then(async () => {
     send('selection', store.selection)
   })
   browser.on('state', (s) => {
-    if (config.browserDevice !== s.device) updateConfig({ browserDevice: s.device })
+    if (config.browserViewport !== s.device) updateConfig({ browserViewport: s.device })
     send('browser:state', s)
   })
   browser.view.webContents.on('did-navigate', (_e, url) => rememberUrl(url))

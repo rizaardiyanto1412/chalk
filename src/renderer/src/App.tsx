@@ -24,7 +24,7 @@ export function App() {
   const [tool, setTool] = useState<CanvasTool>('select')
   const [elements, setElements] = useState<SelectedElement[]>([])
   const [selection, setSelection] = useState<FrameId[]>([])
-  const [browser, setBrowser] = useState<BrowserState>({ url: '', title: '', loading: false, canGoBack: false, canGoForward: false, picking: false, device: 'responsive' })
+  const [browser, setBrowser] = useState<BrowserState>({ url: '', title: '', loading: false, canGoBack: false, canGoForward: false, picking: false, device: 'desktop' })
   const [recent, setRecent] = useState<string[]>([])
   const [pick, setPick] = useState<BrowserPick | null>(null)
   const [events, setEvents] = useState<AgentEvent[]>([])
