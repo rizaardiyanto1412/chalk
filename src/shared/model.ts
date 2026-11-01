@@ -141,6 +141,7 @@ export type AgentEvent =
   | { type: 'text'; text: string }
   | { type: 'tool'; name: string; summary: string }
   | { type: 'error'; text: string }
+  | { type: 'notice'; text: string }
   | { type: 'done'; costUsd?: number; durationMs?: number }
 
 export type AgentStatus = 'idle' | 'running'

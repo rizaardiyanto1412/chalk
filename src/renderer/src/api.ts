@@ -1,8 +1,9 @@
 import type { StyleChoice, StyleSummary } from '../../shared/styles'
 import type { PresenceState } from '../../shared/presence'
 import type { ElementHit, ElementSelectionMode } from '../../shared/elementSelection'
+import type { ChatHistoryState } from '../../shared/chats'
 import type { ChalkApi } from '../../preload'
-import type { AgentEvent, AgentStatus, BrowserPick, BrowserState, CopyImageResult, Doc, ExportActivity, ExportFormat, ExportResult, EditCommand, FrameCommand, NativeEditCommand, FrameId, Op, SelectedElement } from '../../shared/model'
+import type { AgentStatus, BrowserPick, BrowserState, CopyImageResult, Doc, ExportActivity, ExportFormat, ExportResult, EditCommand, FrameCommand, NativeEditCommand, FrameId, Op, SelectedElement } from '../../shared/model'
 
 declare global {
   interface Window {
@@ -24,6 +25,7 @@ export interface InitState {
   browser: BrowserState
   recentUrls: string[]
   tabs: ProjectTab[]
+  chatHistory: ChatHistoryState
   agentStatus: AgentStatus
   presence: PresenceState
 }
@@ -49,7 +51,10 @@ export const api = {
   browser: (action: string, arg?: unknown) => e().invoke('browser', action, arg),
   sendAgent: (text: string, model: string, style: StyleChoice | null) => e().invoke('agent:send', { text, model, style }),
   stopAgent: () => e().invoke('agent:stop'),
-  resetAgent: () => e().invoke('agent:reset'),
+  newChat: () => e().invoke('chats:new'),
+  openChat: (id: string) => e().invoke('chats:open', id),
+  deleteChat: (id: string) => e().invoke('chats:delete', id),
+  clearChats: () => e().invoke('chats:clear'),
   frame: (action: 'copy' | 'open', id: string) => e().invoke('frame', action, id),
   exportFrame: (id: FrameId, format: ExportFormat) => e().invoke('frame:export', id, format) as Promise<ExportResult>,
   copyFrameImage: (id: FrameId) => e().invoke('frame:copy-image', id) as Promise<CopyImageResult>,
@@ -68,7 +73,7 @@ export const api = {
     project: (fn: (p: InitState['project']) => void) => e().on('project', fn),
     browserState: (fn: (s: BrowserState) => void) => e().on('browser:state', fn),
     browserPick: (fn: (p: BrowserPick | null) => void) => e().on('browser:pick', fn),
-    agentEvent: (fn: (ev: AgentEvent) => void) => e().on('agent:event', fn),
+    chatHistory: (fn: (state: ChatHistoryState) => void) => e().on('chats:state', fn),
     agentStatus: (fn: (s: AgentStatus) => void) => e().on('agent:status', fn),
     presence: (fn: (state: PresenceState) => void) => e().on('presence', fn),
     focus: (fn: (t: FocusTarget) => void) => e().on('focus', fn),

@@ -70,9 +70,9 @@ export class Agent extends EventEmitter {
     this.emit('status', s)
   }
 
-  reset(): void {
-    this.stop()
-    this.sessionId = undefined
+  useSession(sessionId?: string): void {
+    if (this.status === 'running') throw new Error('Stop the current turn before switching chats.')
+    this.sessionId = sessionId
   }
 
   stop(): void {
@@ -87,46 +87,71 @@ export class Agent extends EventEmitter {
       this.emitEvent({ type: 'error', text: 'Claude Code was not found. Install it from https://claude.com/claude-code and sign in with `claude`.' })
       return
     }
-    this.emitEvent({ type: 'start', model: model || null })
     this.setStatus('running')
-    this.abort = new AbortController()
-    try {
-      const stream = query({
-        prompt: contextBlock(ctx) + text,
-        options: {
-          pathToClaudeCodeExecutable: claude,
-          cwd: this.cwd(),
-          resume: this.sessionId,
-          model: model || undefined,
-          systemPrompt: AGENT_SYSTEM,
-          settingSources: [],
-          mcpServers: { chalk: { type: 'http', url: this.mcpUrl(), alwaysLoad: true } },
-          tools: ['WebFetch', 'WebSearch'],
-          allowedTools: [...TOOL_NAMES.map((n) => `mcp__chalk__${n}`), 'WebFetch', 'WebSearch'],
-          disallowedTools: ['Bash', 'Write', 'Edit', 'NotebookEdit', 'Task', 'Agent', 'Skill'],
-          permissionMode: 'dontAsk',
-          abortController: this.abort,
-          env: { ...process.env, PATH: `${process.env.PATH ?? ''}:/opt/homebrew/bin:/usr/local/bin:${homedir()}/.local/bin` }
-        }
-      })
-      for await (const m of stream) {
-        if (m.type === 'system' && m.subtype === 'init') {
-          this.sessionId = m.session_id
-          this.emitEvent({ type: 'model', model: m.model })
-        }
-        else if (m.type === 'assistant' && !m.parent_tool_use_id) {
-          for (const block of m.message.content) {
-            if (block.type === 'text' && block.text.trim()) this.emitEvent({ type: 'text', text: block.text })
-            else if (block.type === 'tool_use' && block.name !== 'ToolSearch') this.emitEvent({ type: 'tool', name: block.name.replace(/^mcp__chalk__/, ''), summary: summarize(block.input) })
+    this.emitEvent({ type: 'start', model: model || null })
+    const abort = new AbortController()
+    this.abort = abort
+    const resume = this.sessionId
+    let receivedContent = false
+    const run = async (sessionId?: string): Promise<void> => {
+      let stderr = ''
+      try {
+        const stream = query({
+          prompt: contextBlock(ctx) + text,
+          options: {
+            pathToClaudeCodeExecutable: claude,
+            cwd: this.cwd(),
+            resume: sessionId,
+            model: model || undefined,
+            systemPrompt: AGENT_SYSTEM,
+            settingSources: [],
+            mcpServers: { chalk: { type: 'http', url: this.mcpUrl(), alwaysLoad: true } },
+            tools: ['WebFetch', 'WebSearch'],
+            allowedTools: [...TOOL_NAMES.map((n) => `mcp__chalk__${n}`), 'WebFetch', 'WebSearch'],
+            disallowedTools: ['Bash', 'Write', 'Edit', 'NotebookEdit', 'Task', 'Agent', 'Skill'],
+            permissionMode: 'dontAsk',
+            abortController: abort,
+            stderr: (data) => { stderr = (stderr + data).slice(-4000) },
+            env: { ...process.env, PATH: `${process.env.PATH ?? ''}:/opt/homebrew/bin:/usr/local/bin:${homedir()}/.local/bin` }
           }
-        } else if (m.type === 'result') {
-          if (m.subtype !== 'success') this.emitEvent({ type: 'error', text: `Agent stopped: ${m.subtype}` })
-          this.emitEvent({ type: 'done', costUsd: m.total_cost_usd, durationMs: m.duration_ms })
+        })
+        for await (const m of stream) {
+          if (m.type === 'system' && m.subtype === 'init') {
+            this.sessionId = m.session_id
+            this.emit('session', m.session_id)
+            this.emitEvent({ type: 'model', model: m.model })
+          } else if (m.type === 'assistant' && !m.parent_tool_use_id) {
+            receivedContent = true
+            for (const block of m.message.content) {
+              if (block.type === 'text' && block.text.trim()) this.emitEvent({ type: 'text', text: block.text })
+              else if (block.type === 'tool_use' && block.name !== 'ToolSearch') this.emitEvent({ type: 'tool', name: block.name.replace(/^mcp__chalk__/, ''), summary: summarize(block.input) })
+            }
+          } else if (m.type === 'result') {
+            if (m.subtype !== 'success') {
+              const detail = m.errors.join('\n')
+              if (sessionId && missingSession(detail)) throw new Error(detail)
+              this.emitEvent({ type: 'error', text: `Agent stopped: ${m.subtype}` })
+            }
+            this.emitEvent({ type: 'done', costUsd: m.total_cost_usd, durationMs: m.duration_ms })
+          }
         }
+      } catch (error) {
+        throw new Error(`${error instanceof Error ? error.message : String(error)}${stderr ? `\n${stderr}` : ''}`)
+      }
+    }
+    try {
+      try {
+        await run(resume)
+      } catch (error) {
+        if (!resume || receivedContent || abort.signal.aborted || !missingSession(error instanceof Error ? error.message : String(error))) throw error
+        this.sessionId = undefined
+        this.emit('session', undefined)
+        this.emitEvent({ type: 'notice', text: 'The previous Claude Code session is unavailable. Continuing in a new session. Your saved messages are still here.' })
+        await run()
       }
     } catch (err) {
-      const msg = (err as Error).message
-      this.emitEvent(this.abort.signal.aborted ? { type: 'done' } : { type: 'error', text: msg })
+      const msg = err instanceof Error ? err.message : String(err)
+      this.emitEvent(abort.signal.aborted ? { type: 'done' } : { type: 'error', text: msg })
     } finally {
       this.abort = null
       this.setStatus('idle')
@@ -139,4 +164,8 @@ function summarize(input: unknown): string {
   const o = input as Record<string, unknown>
   const pick = o.name ?? o.url ?? o.ref ?? o.id ?? o.query
   return typeof pick === 'string' ? pick.slice(0, 80) : ''
+}
+
+function missingSession(message: string): boolean {
+  return /no (?:conversation|session) found|unknown (?:session|conversation) id|(?:session|conversation).{0,80}(?:not found|does not exist|no longer exists)|could not (?:find|load|resume).{0,30}(?:session|conversation)/i.test(message)
 }

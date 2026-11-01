@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ChatHistoryState } from '../../shared/chats'
 import type { AgentEvent, AgentStatus, BrowserPick, Frame, SelectedElement } from '../../shared/model'
 import { api } from './api'
 import { Icon } from './icons'
@@ -31,7 +32,7 @@ const TOOL_LABELS: Record<string, string> = {
 }
 
 interface Props {
-  events: AgentEvent[]
+  history: ChatHistoryState
   status: AgentStatus
   presence: PresenceState
   models: readonly { id: string; label: string }[]
@@ -52,12 +53,34 @@ const SUGGESTIONS = [
   'Recipe detail page for a cooking magazine'
 ]
 
-export function Chat({ events, status, presence, models, claudePath, selectedFrames, selectedElements, pick, onClearSelection, onNewChat }: Props) {
+export function Chat({ history, status, presence, models, claudePath, selectedFrames, selectedElements, pick, onClearSelection, onNewChat }: Props) {
+  const events = history.current.events
+  const [menuOpen, setMenuOpen] = useState(false)
+  const head = useRef<HTMLDivElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
   const [text, setText] = useState('')
   const [model, setModel] = useState(() => localStorage.getItem('chalk.model') ?? '')
   const list = useRef<HTMLDivElement>(null)
   const box = useRef<HTMLTextAreaElement>(null)
   const running = status === 'running'
+
+  useEffect(() => {
+    setMenuOpen(false)
+  }, [history.current.id, running])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const close = () => setMenuOpen(false)
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !head.current?.contains(event.target)) close()
+    }
+    window.addEventListener('blur', close)
+    document.addEventListener('pointerdown', outside)
+    return () => {
+      window.removeEventListener('blur', close)
+      document.removeEventListener('pointerdown', outside)
+    }
+  }, [menuOpen])
 
   useEffect(() => {
     list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' })
@@ -77,9 +100,48 @@ export function Chat({ events, status, presence, models, claudePath, selectedFra
 
   return (
     <div className="chat">
-      <div className="chat-head">
-        <span className="chat-session">{events.find((e) => e.type === 'user')?.type === 'user' ? (events.find((e) => e.type === 'user') as { text: string }).text.slice(0, 48) : 'New chat'}</span>
+      <div
+        className="chat-head"
+        ref={head}
+        onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setMenuOpen(false) }}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            setMenuOpen(false)
+            trigger.current?.focus()
+          } else if (menuOpen && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+            event.preventDefault()
+            const buttons = [...(head.current?.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]:not(:disabled)') ?? [])]
+            const current = buttons.findIndex((button) => button === document.activeElement)
+            const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (current + (event.key === 'ArrowUp' ? -1 : 1) + buttons.length) % buttons.length
+            buttons[next]?.focus()
+          }
+        }}
+      >
+        <button className="chat-session" ref={trigger} title={running ? 'Stop the current turn to switch chats' : history.current.title} aria-label="Chat history" aria-haspopup="menu" aria-expanded={menuOpen} disabled={running} onClick={() => setMenuOpen(!menuOpen)}>
+          <span>{history.current.title}</span><Icon name="chevronDown" size={13} />
+        </button>
         <button className="chat-new" onClick={onNewChat} disabled={running}><Icon name="plus" size={13} /> New</button>
+        {menuOpen && (
+          <div className="chat-history" role="menu" aria-label="Chat history">
+            <div className="chat-history-list">
+              {history.chats.length === 0 && <p className="chat-history-empty">No saved chats yet</p>}
+              {chatGroups(history.chats).map(({ label, chats }) => chats.length > 0 && (
+                <div className="chat-history-group" role="group" aria-label={label} key={label}>
+                  <div className="chat-history-heading">{label}</div>
+                  {chats.map((chat) => (
+                    <div className={`chat-history-row ${chat.id === history.current.id ? 'is-current' : ''}`} key={chat.id}>
+                      <button className="chat-history-open" role="menuitemradio" aria-checked={chat.id === history.current.id} title={chat.title} onClick={() => { setMenuOpen(false); void api.openChat(chat.id) }}>
+                        <span>{chat.title}</span>
+                      </button>
+                      <button className="chat-history-delete" role="menuitem" aria-label={`Delete chat: ${chat.title}`} title="Delete chat" onClick={() => { setMenuOpen(false); void api.deleteChat(chat.id) }}><Icon name="trash" size={13} /></button>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+            <button className="chat-history-clear" role="menuitem" disabled={history.chats.length === 0} onClick={() => { setMenuOpen(false); void api.clearChats() }}>Clear Agent History</button>
+          </div>
+        )}
       </div>
 
       <div className="messages" ref={list}>
@@ -203,7 +265,26 @@ function Message({ ev }: { ev: AgentEvent }) {
       )
     case 'error':
       return <div className="msg-error"><Icon name="alert" size={13} /> {ev.text}</div>
+    case 'notice':
+      return <div className="msg-notice" role="status">{ev.text}</div>
     case 'done':
       return ev.durationMs ? <div className="msg-done">Done in {Math.round(ev.durationMs / 1000)}s</div> : null
   }
+}
+
+function chatGroups(chats: ChatHistoryState['chats']) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const yesterday = new Date(today)
+  yesterday.setDate(today.getDate() - 1)
+  const week = new Date(today)
+  week.setDate(today.getDate() - 7)
+  const groups: { label: string; since: number; chats: typeof chats }[] = [
+    { label: 'Today', since: today.getTime(), chats: [] },
+    { label: 'Yesterday', since: yesterday.getTime(), chats: [] },
+    { label: 'Previous 7 days', since: week.getTime(), chats: [] },
+    { label: 'Older', since: -Infinity, chats: [] }
+  ]
+  for (const chat of chats) groups.find((group) => chat.updatedAt >= group.since)?.chats.push(chat)
+  return groups
 }

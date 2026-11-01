@@ -5,6 +5,8 @@ import { basename, join } from 'node:path'
 import type { Server } from 'node:http'
 import { BROWSER_DEVICE_IDS, type BrowserDeviceId, EXPORT_FORMATS, findFrame, type AgentEvent, type CopyImageResult, type ExportActivity, type ExportResult, type EditCommand, type NativeEditCommand, type FrameId, type Op } from '../shared/model'
 import { Store } from './store'
+import { ChatHistory } from './chats'
+import { chatIdSchema } from '../shared/chats'
 import { selectedElements, removeElements } from './elements'
 import { elementHitSchema, samePath } from '../shared/elementSelection'
 import { FrameCommands, frameIdSchema, safeAssetName } from './frameCommands'
@@ -69,6 +71,8 @@ const MAX_RECENT = 30
 
 const mcpUrl = () => `http://127.0.0.1:${port}/mcp`
 const send = (channel: string, payload?: unknown) => win?.webContents.send(channel, payload)
+const chats = new ChatHistory((state) => send('chats:state', state))
+let chatDialogOpen = false
 const frameCommands = new FrameCommands(store, (ids, focus) => {
   store.selection = ids
   store.selectedElements = []
@@ -88,16 +92,19 @@ function edit(command: EditCommand): void {
 }
 
 function openProject(dir: string): void {
-  if (dir === store.dir) return
+  if (dir === store.dir || agent?.status === 'running' || chatDialogOpen) return
+  chats.flush()
   store.open(dir)
   updateConfig({ projectDir: dir, projects: config.projects.includes(dir) ? config.projects : [...config.projects, dir] })
-  agent?.reset()
+  chats.openProject(dir)
+  agent?.useSession(chats.current.sessionId)
   win?.setTitle(`${basename(dir)} · Chalk`)
   send('project', { dir, name: basename(dir), epoch: store.projectEpoch })
   send('tabs', tabs())
 }
 
 function closeProject(dir: string): void {
+  if (agent.status === 'running' || chatDialogOpen) return
   const projects = config.projects.filter((p) => p !== dir)
   if (projects.length === 0) return
   updateConfig({ projects })
@@ -107,6 +114,7 @@ function closeProject(dir: string): void {
 
 /** A new untitled project in ~/Chalk, opened straight away like a new document. */
 function newUntitled(): void {
+  if (agent.status === 'running' || chatDialogOpen) return
   const root = join(homedir(), 'Chalk')
   let n = 1
   while (existsSync(join(root, n === 1 ? 'Untitled' : `Untitled ${n}`))) n++
@@ -123,7 +131,7 @@ function rememberUrl(url: string): void {
 }
 
 async function chooseProject(create: boolean): Promise<void> {
-  if (!win) return
+  if (!win || agent.status === 'running' || chatDialogOpen) return
   const res = create
     ? await dialog.showSaveDialog(win, { title: 'New Chalk project', defaultPath: join(homedir(), 'Chalk', 'Untitled'), buttonLabel: 'Create' })
     : await dialog.showOpenDialog(win, { title: 'Open Chalk project folder', defaultPath: join(homedir(), 'Chalk'), properties: ['openDirectory', 'createDirectory'] })
@@ -290,6 +298,7 @@ function registerIpc(): void {
     recentUrls: config.recentUrls,
     tabs: tabs(),
     agentStatus: agent.status,
+    chatHistory: chats.state(),
     presence: presence.state
   }))
   handle('op', (_e, input: Op | Op[]) => {
@@ -373,18 +382,57 @@ function registerIpc(): void {
     }
   })
   handle('agent:send', (_e, raw: unknown) => {
+    if (agent.status === 'running' || chatDialogOpen) return
     try {
-      const { text, model, style } = z.object({ text: z.string(), model: z.string(), style: styleChoiceSchema.nullish() }).strict().parse(raw)
+      const { text, model, style } = z.object({ text: z.string().trim().min(1), model: z.string(), style: styleChoiceSchema.nullish() }).strict().parse(raw)
       const resolved = style ? loadStyle({ name: style.id, variant: style.variant }) : null
       if (style && resolved?.id !== style.id) throw new Error('Style attachments require a canonical style ID from the catalog.')
       const selectedFrames = store.selection.flatMap((id) => findFrame(store.doc, id) ?? [])
       void agent.send(text, { selectedFrames, selectedElements: store.selectedElements, browserPick: store.browserPick, browserUrl: browser.state().url, style: resolved }, model)
     } catch (error) {
-      send('agent:event', { type: 'error', text: `Invalid style or message: ${error instanceof Error ? error.message : String(error)}` })
+      chats.append({ type: 'error', text: `Invalid style or message: ${error instanceof Error ? error.message : String(error)}` })
     }
   })
   handle('agent:stop', () => agent.stop())
-  handle('agent:reset', () => agent.reset())
+  const newChat = () => {
+    if (agent.status === 'running' || chatDialogOpen) return
+    chats.new()
+    agent.useSession()
+  }
+  handle('agent:reset', newChat)
+  handle('chats:new', newChat)
+  handle('chats:list', () => chats.state())
+  handle('chats:open', (_e, raw: unknown) => {
+    const id = chatIdSchema.parse(raw)
+    if (agent.status === 'running' || chatDialogOpen) return
+    chats.open(id)
+    agent.useSession(chats.current.sessionId)
+  })
+  handle('chats:delete', async (_e, raw: unknown) => {
+    const id = chatIdSchema.parse(raw)
+    if (!win || agent.status === 'running' || chatDialogOpen || !chats.state().chats.some((chat) => chat.id === id)) return
+    chatDialogOpen = true
+    try {
+      const { response } = await dialog.showMessageBox(win, { type: 'warning', message: 'Delete this chat?', detail: 'This removes its saved messages from this project.', buttons: ['Cancel', 'Delete Chat'], defaultId: 0, cancelId: 0, noLink: true })
+      if (response !== 1) return
+      chats.delete(id)
+      agent.useSession(chats.current.sessionId)
+    } finally {
+      chatDialogOpen = false
+    }
+  })
+  handle('chats:clear', async () => {
+    if (!win || agent.status === 'running' || chatDialogOpen) return
+    chatDialogOpen = true
+    try {
+      const { response } = await dialog.showMessageBox(win, { type: 'warning', message: 'Clear Agent History?', detail: 'This removes all saved chats from this project.', buttons: ['Cancel', 'Clear Agent History'], defaultId: 0, cancelId: 0, noLink: true })
+      if (response !== 1) return
+      chats.clear()
+      agent.useSession()
+    } finally {
+      chatDialogOpen = false
+    }
+  })
   handle('frame', async (_e, rawAction: unknown, rawId: unknown) => {
     const action = z.enum(['copy', 'open']).parse(rawAction)
     const f = findFrame(store.doc, z.string().parse(rawId))
@@ -482,6 +530,9 @@ app.whenReady().then(async () => {
     focus: (target) => send('focus', target)
   }
   agent = new Agent(mcpUrl, () => store.dir)
+  chats.openProject(store.dir)
+  agent.useSession(chats.current.sessionId)
+  agent.on('session', (id: string | undefined) => chats.setSession(id))
 
   store.on('change', (doc) => {
     for (const f of doc.frames) if (f.kind === 'html') notePhotoUse(photoKeys(), f.html)
@@ -503,13 +554,17 @@ app.whenReady().then(async () => {
     void browser.present(state.visual).catch((error) => console.error('Browser presence failed', error))
   })
   agent.on('event', (e: AgentEvent) => {
+    chats.append(e)
     if (e.type === 'start') presence.dispatch({ type: 'turn-start', since: Date.now(), model: e.model })
     if (e.type === 'model') presence.dispatch({ type: 'model', model: e.model })
     if (e.type === 'tool') presence.dispatch({ type: 'activity', activity: activityForTool(e.name) })
     send('agent:event', e)
   })
   agent.on('status', (s) => {
-    if (s === 'idle') presence.dispatch({ type: 'turn-end' })
+    if (s === 'idle') {
+      chats.flush()
+      presence.dispatch({ type: 'turn-end' })
+    }
     send('agent:status', s)
   })
 
@@ -521,6 +576,7 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', () => {
   store.flush()
+  chats.flush()
   agent?.stop()
   server?.close()
 })

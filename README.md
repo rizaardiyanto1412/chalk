@@ -35,6 +35,8 @@ Then, in your project, ask Claude something like "Build the selected Chalk frame
 
 A project is a folder. `chalk.json` holds the frames, and `assets/` holds browser captures. The default project is `~/Chalk/Untitled`. Use File → New Project or Open Project to switch.
 
+Agent chats are saved per project in `.chalk/chats/`. Chalk restores the most recent chat when you open a project. Use the chat title menu to resume or delete a conversation, or clear the project's Agent history. **+ New** starts an empty chat. See [Chat history](docs/chat-history.md) for storage and session details.
+
 ## Development
 
 ```sh

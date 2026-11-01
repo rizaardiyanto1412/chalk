@@ -1,6 +1,7 @@
 const PATHS = {
   canvas: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
   globe: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20',
+  chevronDown: 'M6 9l6 6 6-6',
   left: 'M15 18l-6-6 6-6',
   right: 'M9 18l6-6-6-6',
   reload: 'M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5',

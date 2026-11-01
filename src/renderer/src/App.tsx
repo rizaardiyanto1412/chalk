@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { AgentEvent, AgentStatus, BrowserPick, Doc, ExportActivity, FrameId, SelectedElement } from '../../shared/model'
+import type { AgentStatus, BrowserPick, Doc, ExportActivity, FrameId, SelectedElement } from '../../shared/model'
+import type { ChatHistoryState } from '../../shared/chats'
 import { api, type BrowserState, type InitState, type ProjectTab } from './api'
 import { Canvas, type CanvasHandle, type CanvasTool } from './Canvas'
 import { BrowserPane } from './BrowserPane'
@@ -29,7 +30,7 @@ export function App() {
   const [browser, setBrowser] = useState<BrowserState>({ url: '', title: '', loading: false, canGoBack: false, canGoForward: false, picking: false, device: 'desktop' })
   const [recent, setRecent] = useState<string[]>([])
   const [pick, setPick] = useState<BrowserPick | null>(null)
-  const [events, setEvents] = useState<AgentEvent[]>([])
+  const [chatHistory, setChatHistory] = useState<ChatHistoryState | null>(null)
   const [status, setStatus] = useState<AgentStatus>('idle')
   const [presence, setPresence] = useState(idlePresence)
   const [zoom, setZoom] = useState(1)
@@ -59,6 +60,7 @@ export function App() {
       setTabs(s.tabs)
       setBrowser(s.browser)
       setRecent(s.recentUrls)
+      setChatHistory(s.chatHistory)
       setStatus(s.agentStatus)
       setPresence(s.presence)
     })
@@ -72,7 +74,6 @@ export function App() {
       api.on.recentUrls(setRecent),
       api.on.project((p) => {
         setProject(p)
-        setEvents([])
         select([])
         setTimeout(() => canvas.current?.fit(), 50)
       }),
@@ -81,7 +82,7 @@ export function App() {
         setPick(p)
         if (p) setLeftTab('agent')
       }),
-      api.on.agentEvent((e) => setEvents((prev) => [...prev, e])),
+      api.on.chatHistory(setChatHistory),
       api.on.agentStatus(setStatus),
       api.on.presence(setPresence),
       api.on.history((direction) => {
@@ -114,7 +115,7 @@ export function App() {
     return () => window.removeEventListener('keydown', down)
   }, [])
 
-  if (!init) return <div className="boot" />
+  if (!init || !chatHistory) return <div className="boot" />
 
   const selectedFrames = doc.frames.filter((f) => selection.includes(f.id))
 
@@ -144,12 +145,13 @@ export function App() {
           <span className="brand"><span className="brand-mark" /> Chalk</span>
           <nav className="tabs">
             {tabs.map((t) => (
-              <div key={t.dir} className={`tab ${t.dir === project.dir ? 'is-on' : ''}`} title={t.dir} onClick={() => api.project('switch', t.dir)}>
+              <div key={t.dir} className={`tab ${t.dir === project.dir ? 'is-on' : ''}`} title={t.dir} aria-disabled={status === 'running'} onClick={() => { if (status !== 'running') void api.project('switch', t.dir) }}>
                 <Icon name="file" size={13} />
                 <span>{t.name}</span>
                 {tabs.length > 1 && (
                   <button
                     className="tab-close"
+                    disabled={status === 'running'}
                     aria-label={`Close ${t.name}`}
                     onClick={(e) => {
                       e.stopPropagation()
@@ -161,7 +163,7 @@ export function App() {
                 )}
               </div>
             ))}
-            <button className="tab-add" title="New project (⌘N)" aria-label="New project" onClick={() => api.project('new')}><Icon name="plus" size={14} /></button>
+            <button disabled={status === 'running'} className="tab-add" title="New project (⌘N)" aria-label="New project" onClick={() => api.project('new')}><Icon name="plus" size={14} /></button>
           </nav>
           <div className="titlebar-right">
             <ConnectButton mcpUrl={init.mcpUrl} />
@@ -183,7 +185,7 @@ export function App() {
               <div className="left-body">
                 <div style={{ display: leftTab === 'agent' ? 'contents' : 'none' }}>
                   <Chat
-                    events={events}
+                    history={chatHistory}
                     status={status}
                     presence={presence}
                     models={init.models}
@@ -192,10 +194,7 @@ export function App() {
                     selectedElements={elements}
                     pick={pick}
                     onClearSelection={() => select([])}
-                    onNewChat={() => {
-                      void api.resetAgent()
-                      setEvents([])
-                    }}
+                    onNewChat={() => void api.newChat()}
                   />
                 </div>
                 {leftTab === 'frames' && (

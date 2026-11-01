@@ -17,6 +17,7 @@ import { checkArrangement } from './arrangement-e2e.mjs'
 import { checkElements } from './elements-e2e.mjs'
 import { checkMarquee } from './marquee-e2e.mjs'
 import { checkPresence } from './presence-e2e.mjs'
+import { checkChatHistory } from './chat-history-e2e.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const artifacts = process.env.CHALK_E2E_ARTIFACTS || join(root, 'e2e-artifacts')
@@ -543,6 +544,7 @@ await checkBrowserDevices({ app, win, client: framesClient, call, json, check, a
 await framesClient.close()
 await app.close()
 await checkBrowserDevicePreference({ electron, root, project, artifacts, check })
+await checkChatHistory({ electron, root, artifacts, check })
 site.close()
 const failed = results.filter((r) => r[0] === 'FAIL').length
 const skipped = results.filter((r) => r[0] === 'SKIP').length
