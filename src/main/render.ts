@@ -2,10 +2,33 @@ import { BrowserWindow, session } from 'electron'
 import { z } from 'zod'
 import { previews } from './previews'
 
+/** Fonts and the icon element are ready, then layout holds still for three frames (late Tailwind rebuilds, font swaps). */
 const SETTLE_JS = `Promise.race([
   Promise.all([document.fonts.ready, customElements.whenDefined('iconify-icon').catch(() => {})]),
   new Promise((r) => setTimeout(r, 2500))
-]).then(() => new Promise((r) => setTimeout(r, 350)))`
+]).then(() => new Promise((resolve) => {
+  const end = performance.now() + 600
+  let last = -1, still = 0
+  const tick = () => {
+    let height
+    try { height = document.documentElement.scrollHeight } catch { return resolve() }
+    still = height === last ? still + 1 : 0
+    last = height
+    if (still >= 3 || performance.now() > end) resolve()
+    else requestAnimationFrame(tick)
+  }
+  requestAnimationFrame(tick)
+}))`
+
+/** Before a capture, give icons a moment to fetch and draw their SVGs, so screenshots never show empty icon slots. */
+const ICONS_JS = `Promise.race([
+  new Promise((resolve) => {
+    const drawn = () => [...document.querySelectorAll('iconify-icon')].every((icon) => !icon.shadowRoot || icon.shadowRoot.querySelector('svg'))
+    const tick = () => (drawn() ? resolve() : setTimeout(tick, 25))
+    tick()
+  }),
+  new Promise((resolve) => setTimeout(resolve, 1000))
+])`
 
 const MAX_HEIGHT = 12000
 let exportSession: Electron.Session | undefined
@@ -70,6 +93,7 @@ export function renderUrl(url: string, width: number, height: number, review: tr
 export function renderUrl(url: string, width: number, height?: number): Promise<RenderResult>
 export async function renderUrl(url: string, width: number, height?: number, review = false): Promise<RenderResult | ReviewedRenderResult> {
   return withSettledPage(url, width, height, async (win, target, contentHeight) => {
+    await win.webContents.executeJavaScript(ICONS_JS)
     const diagnostics = review ? diagnosticsSchema.parse(await win.webContents.executeJavaScript(DIAGNOSTICS_JS)) : null
     win.webContents.invalidate()
     const image = await win.webContents.capturePage({ x: 0, y: 0, width, height: target })
@@ -77,8 +101,14 @@ export async function renderUrl(url: string, width: number, height?: number, rev
   })
 }
 
+/** The content height of a page at a width, without capturing pixels. Agents call this on every create and edit. */
+export function measureUrl(url: string, width: number): Promise<number> {
+  return withSettledPage(url, width, undefined, async (_win, _target, contentHeight) => contentHeight)
+}
+
 export async function renderExport(url: string, width: number, height: number, format: 'png' | 'jpeg' | 'pdf'): Promise<Buffer> {
   return withSettledPage(url, width, height, async (win) => {
+    await win.webContents.executeJavaScript(ICONS_JS)
     if (format === 'pdf') {
       await win.webContents.insertCSS(`@page{margin:0!important}html,body{width:${width}px!important;height:${height}px!important;max-height:${height}px!important;overflow:hidden!important}`)
       return win.webContents.printToPDF({

@@ -12,7 +12,7 @@ import { Browser } from './browser'
 import { startServer, DEFAULT_PORT } from './server'
 import { createPreview } from './previews'
 import type { PhotoKeys } from './photos'
-import { renderUrl } from './render'
+import { measureUrl } from './render'
 import { randomUUID } from 'node:crypto'
 import { MODELS } from './agent'
 import { frameDocument } from './frameHtml'
@@ -95,7 +95,7 @@ function workspaceFor(dir: string): Workspace {
       measure: async (html, width) => {
         const preview = createPreview(html, `http://127.0.0.1:${port}`)
         try {
-          return (await renderUrl(preview.url, width)).contentHeight
+          return await measureUrl(preview.url, width)
         } finally {
           preview.dispose()
         }
