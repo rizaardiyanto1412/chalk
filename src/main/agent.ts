@@ -1,25 +1,11 @@
 import { EventEmitter } from 'node:events'
-import { existsSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
 import { homedir } from 'node:os'
+import { findCli } from './agentCli'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentEvent, AgentStatus, BrowserPick, Frame, SelectedElement } from '../shared/model'
 import type { ResolvedStyle } from './styles'
 import { AGENT_SYSTEM, STYLE_PRECEDENCE } from './prompt'
 import { TOOL_NAMES } from './tools'
-
-/** Find the user's own Claude Code CLI. A packaged app starts with a minimal PATH, so check known spots first. */
-export function findClaude(): string | null {
-  if (process.env.CHALK_CLAUDE_PATH) return process.env.CHALK_CLAUDE_PATH
-  const candidates = [`${homedir()}/.local/bin/claude`, '/opt/homebrew/bin/claude', '/usr/local/bin/claude', `${homedir()}/.claude/local/claude`]
-  const hit = candidates.find((p) => existsSync(p))
-  if (hit) return hit
-  try {
-    return execFileSync('/bin/zsh', ['-lc', 'command -v claude'], { encoding: 'utf8' }).trim() || null
-  } catch {
-    return null
-  }
-}
 
 export interface TurnContext {
   selectedFrames: Frame[]
@@ -81,7 +67,7 @@ export class Agent extends EventEmitter {
 
   async send(text: string, ctx: TurnContext, model: string): Promise<void> {
     if (this.status === 'running') return
-    const claude = findClaude()
+    const claude = findCli('claude')
     this.emitEvent({ type: 'user', text })
     if (!claude) {
       this.emitEvent({ type: 'error', text: 'Claude Code was not found. Install it from https://claude.com/claude-code and sign in with `claude`.' })

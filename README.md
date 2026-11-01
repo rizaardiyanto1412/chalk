@@ -23,7 +23,9 @@ Chalk needs Claude Code installed and signed in (`claude` must run in Terminal).
 
 ## Use your designs from Claude Code
 
-Run this once:
+Click **Connect agent** in the title bar. The dialog adds Chalk's MCP address to Claude Code, Codex, Cursor, VS Code (GitHub Copilot), or OpenCode in one click. It shows whether the agent uses the current address, the manual command or config, and three prompts to try. See [Connect an agent](docs/connect-agents.md) for what each button changes.
+
+To connect Claude Code by hand, run this once:
 
 ```sh
 claude mcp add --scope user --transport http chalk http://127.0.0.1:7801/mcp
@@ -42,6 +44,7 @@ Agent chats are saved per project in `.chalk/chats/`. Chalk restores the most re
 ```sh
 npm run dev          # run with hot reload
 npm run typecheck
+npm run test:connect # connection logic against temporary configs and fake agent CLIs
 npm run build && npm run e2e             # end-to-end checks against the real app
 node scripts/agent-run.mjs runs/x "prompt"   # drive a real agent run and save renders
 ```

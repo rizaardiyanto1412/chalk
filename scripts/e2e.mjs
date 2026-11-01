@@ -18,12 +18,14 @@ import { checkElements } from './elements-e2e.mjs'
 import { checkMarquee } from './marquee-e2e.mjs'
 import { checkPresence } from './presence-e2e.mjs'
 import { checkChatHistory } from './chat-history-e2e.mjs'
+import { prepareConnectAgents, checkConnectAgents, checkConnectBrowserOverlay } from './connect-agents-e2e.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const artifacts = process.env.CHALK_E2E_ARTIFACTS || join(root, 'e2e-artifacts')
 mkdirSync(artifacts, { recursive: true })
 const project = realpathSync(mkdtempSync(join(tmpdir(), 'chalk-e2e-')))
 const profile = realpathSync(mkdtempSync(join(tmpdir(), 'chalk-e2e-profile-')))
+const agents = prepareConnectAgents({ root, profile, artifacts })
 const fakeLog = join(artifacts, 'fake-claude.jsonl')
 writeFileSync(fakeLog, '')
 const PORT = Number(process.env.CHALK_PORT) || 7911
@@ -59,7 +61,7 @@ await new Promise((r) => site.listen(PORT + 1, '127.0.0.1', r))
 const SITE = `http://127.0.0.1:${PORT + 1}`
 
 const launch = () =>
-  electron.launch({ args: [root, `--user-data-dir=${profile}`], cwd: root, env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'ELECTRON_RUN_AS_NODE')), CHALK_CLAUDE_PATH: join(root, 'scripts/fixtures/fake-claude.mjs'), CHALK_FAKE_LOG: fakeLog, CHALK_PROJECT_DIR: project, CHALK_PORT: String(PORT), ELECTRON_RENDERER_URL: '' } })
+  electron.launch({ args: [root, `--user-data-dir=${profile}`], cwd: root, env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'ELECTRON_RUN_AS_NODE')), CHALK_CLAUDE_PATH: join(root, 'scripts/fixtures/fake-claude.mjs'), CHALK_FAKE_LOG: fakeLog, ...agents.env, CHALK_PROJECT_DIR: project, CHALK_PORT: String(PORT), ELECTRON_RENDERER_URL: '' } })
 
 async function mcp() {
   const client = new Client({ name: 'e2e', version: '0' })
@@ -99,6 +101,8 @@ await check('UI boots with the agent panel, tool strip, project tab, and browser
   await agentTab()
   await win.screenshot({ path: join(artifacts, '01-empty.png') })
 })
+
+await checkConnectAgents({ app, win, check, artifacts, port: PORT, agents })
 
 await checkPresence({ app, win, client, call, json, check, artifacts, agentTab })
 
@@ -470,6 +474,8 @@ await check('dropping a PNG on the canvas adds an image frame where it lands', a
   assert.equal(dropped.width, 1440)
   await call(client, 'delete_frame', { id: dropped.id })
 })
+
+await checkConnectBrowserOverlay({ app, win, check })
 
 await check('recent URLs show on the browser start page and clear', async () => {
   await win.locator('.url-home').click()

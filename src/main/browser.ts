@@ -116,6 +116,8 @@ export class Browser extends EventEmitter {
   private overlayObject: string | null = null
   private navigation = 0
   private presence: PresenceVisual = { phase: 'idle' }
+  private requestedVisible = false
+  private obscured = false
 
   constructor(device: BrowserDeviceId = 'desktop') {
     super()
@@ -256,8 +258,14 @@ export class Browser extends EventEmitter {
     })
   }
 
+  setObscured(obscured: boolean): void {
+    this.obscured = obscured
+    this.view.setVisible(this.requestedVisible && !obscured)
+  }
+
   setVisible(v: boolean): void {
-    this.view.setVisible(v)
+    this.requestedVisible = v
+    this.view.setVisible(v && !this.obscured)
   }
 
   state(): BrowserState {

@@ -12,7 +12,8 @@
     "start": "electron-vite preview",
     "dist": "electron-vite build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --dir",
     "e2e": "node scripts/e2e.mjs",
-    "install-app": "npm run dist && codesign --force --deep --sign - dist/mac-arm64/Chalk.app && rm -rf /Applications/Chalk.app && cp -R dist/mac-arm64/Chalk.app /Applications/Chalk.app"
+    "install-app": "npm run dist && codesign --force --deep --sign - dist/mac-arm64/Chalk.app && rm -rf /Applications/Chalk.app && cp -R dist/mac-arm64/Chalk.app /Applications/Chalk.app",
+    "test:connect": "node scripts/connect-agents-test.mjs"
   },
   "build": {
     "appId": "dev.chalk.app",

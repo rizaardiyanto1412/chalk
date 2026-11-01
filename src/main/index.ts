@@ -17,13 +17,16 @@ import { notePhotoUse, type PhotoKeys } from './photos'
 import { renderUrl } from './render'
 import { randomUUID } from 'node:crypto'
 import type { ToolContext } from './tools'
-import { Agent, findClaude, MODELS } from './agent'
+import { Agent, MODELS } from './agent'
 import { Presence } from './presence'
 import { activityForTool, type PresenceState } from '../shared/presence'
 import { frameDocument } from './frameHtml'
 import { buildExport, copyFrameImage, exportFileName, exportFormatSchema, snapshotExport, writeExport } from './export'
 import { loadStyle, styleChoiceSchema, styleSummaries } from './styles'
 import { z } from 'zod'
+import { CONNECT_LEARN_URL, connectAgentIdSchema } from '../shared/connectAgents'
+import { configLocations, createConnections, type ConnectDeps } from './connectAgents'
+import { findCli } from './agentCli'
 
 const store = new Store()
 let win: BrowserWindow | null = null
@@ -284,14 +287,31 @@ function handle(channel: string, fn: (e: Electron.IpcMainInvokeEvent, ...args: a
   })
 }
 
+/** Isolated runs (CHALK_PROJECT_DIR) must never touch the user's agent configs or run their real CLIs. */
+function connectDeps(): ConnectDeps {
+  if (!process.env.CHALK_PROJECT_DIR) return { locations: configLocations(homedir()), findCli, openExternal: (url) => shell.openExternal(url) }
+  const home = join(app.getPath('userData'), 'agent-home')
+  const bin = process.env.CHALK_CONNECT_BIN
+  return {
+    locations: configLocations(home, [join(home, 'Applications')]),
+    findCli: (name) => (bin && existsSync(join(bin, name)) ? join(bin, name) : null),
+    openExternal: async () => {}
+  }
+}
+
 function registerIpc(): void {
+  const connections = createConnections(connectDeps())
+  handle('connect:state', (_e, raw: unknown) => connections.state(connectAgentIdSchema.parse(raw), mcpUrl()))
+  handle('connect:add', (_e, raw: unknown) => connections.connect(connectAgentIdSchema.parse(raw), mcpUrl()))
+  handle('connect:learn', () => shell.openExternal(CONNECT_LEARN_URL))
+
   handle('init', () => ({
     doc: store.doc,
     selectedElements: store.selectedElements,
     project: { dir: store.dir, name: basename(store.dir), epoch: store.projectEpoch },
     port,
     mcpUrl: mcpUrl(),
-    claudePath: findClaude(),
+    claudePath: findCli('claude'),
     models: MODELS,
     styles: styleSummaries(),
     browser: browser.state(),
@@ -359,6 +379,8 @@ function registerIpc(): void {
         return browser.setBounds(z.object({ x: z.number().finite(), y: z.number().finite(), width: z.number().finite().nonnegative(), height: z.number().finite().nonnegative() }).parse(arg))
       case 'visible':
         return browser.setVisible(!!arg)
+      case 'obscured':
+        return browser.setObscured(z.boolean().parse(arg))
       case 'navigate':
         return browser.navigate(String(arg))
       case 'back':

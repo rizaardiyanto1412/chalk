@@ -5,6 +5,7 @@ import { api, type BrowserState, type InitState, type ProjectTab } from './api'
 import { Canvas, type CanvasHandle, type CanvasTool } from './Canvas'
 import { BrowserPane } from './BrowserPane'
 import { Chat } from './Chat'
+import { ConnectButton } from './ConnectAgents'
 import { Inspector } from './Inspector'
 import { nativeEditing } from './editFocus'
 import { idlePresence } from '../../shared/presence'
@@ -339,36 +340,6 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
           <button type="submit" className="primary">Save</button>
         </div>
       </form>
-    </div>
-  )
-}
-
-function ConnectButton({ mcpUrl }: { mcpUrl: string }) {
-  const [open, setOpen] = useState(false)
-  const [copied, setCopied] = useState(false)
-  const cmd = `claude mcp add --scope user --transport http chalk ${mcpUrl}`
-  return (
-    <div className="connect">
-      <button className="connect-btn" onClick={() => setOpen(!open)}><Icon name="code" size={14} /> Claude Code</button>
-      {open && (
-        <div className="popover" onMouseLeave={() => setOpen(false)}>
-          <h4>Build your designs with Claude Code</h4>
-          <p>Run this once in Terminal. Chalk must be open while Claude uses it.</p>
-          <div className="code">
-            <code>{cmd}</code>
-            <button
-              onClick={() => {
-                void api.copy(cmd)
-                setCopied(true)
-                setTimeout(() => setCopied(false), 1400)
-              }}
-            >
-              <Icon name={copied ? 'check' : 'copy'} size={13} />
-            </button>
-          </div>
-          <p className="muted">Then ask Claude: “Build the selected Chalk frame in this project.”</p>
-        </div>
-      )}
     </div>
   )
 }

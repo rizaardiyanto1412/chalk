@@ -1,3 +1,4 @@
+import type { AgentConnection, ConnectAgentId } from '../../shared/connectAgents'
 import type { StyleChoice, StyleSummary } from '../../shared/styles'
 import type { PresenceState } from '../../shared/presence'
 import type { ElementHit, ElementSelectionMode } from '../../shared/elementSelection'
@@ -40,6 +41,9 @@ export type FocusTarget = { mode: 'canvas'; frameId?: FrameId } | { mode: 'brows
 const e = () => window.chalk
 
 export const api = {
+  connectState: (id: ConnectAgentId): Promise<AgentConnection> => e().invoke('connect:state', id) as Promise<AgentConnection>,
+  connectAgent: (id: ConnectAgentId): Promise<AgentConnection> => e().invoke('connect:add', id) as Promise<AgentConnection>,
+  connectLearnMore: () => e().invoke('connect:learn'),
   init: (): Promise<InitState> => e().invoke('init') as Promise<InitState>,
   op: (op: Op | Op[]) => e().invoke('op', op),
   frameCommand: (command: FrameCommand) => e().invoke('frames:command', command),
