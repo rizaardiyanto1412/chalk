@@ -52,6 +52,8 @@ export const api = {
   exportFrame: (id: FrameId, format: ExportFormat) => e().invoke('frame:export', id, format) as Promise<ExportResult>,
   copyFrameImage: (id: FrameId) => e().invoke('frame:copy-image', id) as Promise<CopyImageResult>,
   copy: (text: string) => e().invoke('clipboard', text),
+  photoKeys: (next?: { unsplash: string; pexels: string }) =>
+    e().invoke('settings:photoKeys', next) as Promise<{ unsplash: string; pexels: string; active: 'unsplash' | 'pexels' | 'wikimedia' }>,
   project: (action: 'new' | 'open' | 'reveal' | 'switch' | 'close', dir?: string) => e().invoke('project', action, dir),
   addImage: (img: { name: string; bytes: Uint8Array; x: number; y: number }) => e().invoke('image:add', img),
   on: {
@@ -68,6 +70,7 @@ export const api = {
     agentStatus: (fn: (s: AgentStatus) => void) => e().on('agent:status', fn),
     focus: (fn: (t: FocusTarget) => void) => e().on('focus', fn),
     history: (fn: (direction: 'undo' | 'redo') => void) => e().on('history', fn),
+    settingsOpen: (fn: () => void) => e().on('settings:open', fn),
     tabs: (fn: (t: ProjectTab[]) => void) => e().on('tabs', fn),
     recentUrls: (fn: (u: string[]) => void) => e().on('browser:recent', fn)
   }

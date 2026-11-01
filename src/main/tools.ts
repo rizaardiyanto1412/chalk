@@ -6,6 +6,8 @@ import { BROWSER_DEVICE_IDS, findFrame, nextSlot, FRAME_GAP, type Frame, type Fr
 import type { Store } from './store'
 import type { Browser } from './browser'
 import { renderUrl } from './render'
+import { createPreview } from './previews'
+import { contactSheet, searchPhotos, type PhotoKeys } from './photos'
 import { frameDocument } from './frameHtml'
 import { resolveStyle, styleInputSchema } from './styles'
 import { DESIGN_GUIDE, STYLE_PRECEDENCE } from './prompt'
@@ -19,6 +21,7 @@ export interface ToolContext {
   browser: Browser
   frameUrl: (frame: Frame) => string
   origin: () => string
+  photoKeys: () => PhotoKeys
   /** Render HTML that is not on the canvas yet and return its content height. */
   measure: (html: string, width: number) => Promise<number>
   /** Tell the UI what the agent is touching so the user can watch it. */
@@ -231,6 +234,27 @@ export const TOOLS: Tool[] = [
     }
   }),
   tool({
+    name: 'search_photos',
+    description: 'Find real photographs for a design. Returns a numbered contact sheet image to choose from by sight, plus each photo\'s direct URL, size, credit, and license. Search with concrete visual words (subject, setting, light, mood), not brand names. Use the returned url exactly in <img src> or a CSS background; never invent photo URLs. Add an HTML comment with the credit and license next to each photo you use.',
+    input: {
+      query: z.string().min(2).max(120),
+      orientation: z.enum(['landscape', 'portrait', 'square']).optional(),
+      count: z.number().int().min(4).max(16).optional()
+    },
+    readOnly: true,
+    run: async ({ query, orientation, count }, ctx) => {
+      const found = await searchPhotos(ctx.photoKeys(), query, orientation, count ?? 12)
+      if (found.photos.length === 0) return [text({ provider: found.provider, photos: [], note: 'No usable photos. Try broader or more concrete visual words.' })]
+      const preview = createPreview(contactSheet(found.photos), ctx.origin())
+      try {
+        const { png } = await renderUrl(preview.url, 1200)
+        return [image(png), text({ provider: found.provider, photos: found.photos.map(({ thumb: _thumb, ...p }) => p) })]
+      } finally {
+        preview.dispose()
+      }
+    }
+  }),
+  tool({
     name: 'get_style',
     description: 'List 32 original Chalk recipes or load by id, Chalk name or exact direction. Only name, variant and imagery are accepted. Load composition, supported fonts, semantic Tailwind tokens, responsive sizes and curated choices. ' + STYLE_PRECEDENCE,
     input: styleInputSchema.shape,
@@ -253,7 +277,7 @@ export const TOOLS: Tool[] = [
   }),
   tool({
     name: 'browser_set_device',
-    description: 'Set the browser viewport preset: responsive follows the sidebar, phone is 390x844, tablet is 1180x820 CSS pixels. Fixed viewports fit inside the sidebar. Does not change user agent or emulate touch.',
+    description: 'Set the browser viewport preset: responsive follows the sidebar, phone is 390x844, tablet is 1180x820, desktop is 1440x900 CSS pixels. Set desktop before reading or capturing a page you will redesign for desktop, so you see its real desktop layout. Fixed viewports fit inside the sidebar. Does not change user agent or emulate touch.',
     input: { device: z.enum(BROWSER_DEVICE_IDS) },
     run: async ({ device }, ctx) => {
       ctx.focus({ mode: 'browser' })

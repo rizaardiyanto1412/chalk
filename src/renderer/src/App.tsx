@@ -33,6 +33,8 @@ export function App() {
   const [exportActivity, setExportActivity] = useState<ExportActivity | null>(null)
   const [frameError, setFrameError] = useState<string | null>(null)
   const canvas = useRef<CanvasHandle>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  useEffect(() => api.on.settingsOpen(() => setSettingsOpen(true)), [])
 
   const select = useCallback((ids: FrameId[]) => {
     setSelection(ids)
@@ -251,6 +253,7 @@ export function App() {
         </div>
       </div>
 
+      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
       {browserOpen && (
         <>
           <div className="splitter" onPointerDown={startResize} />
@@ -292,6 +295,44 @@ function LayerRow({ name, kind, selected, onSelect, onRename }: { name: string; 
       ) : (
         <span>{name}</span>
       )}
+    </div>
+  )
+}
+
+const SOURCE_LABEL = { unsplash: 'Unsplash', pexels: 'Pexels', wikimedia: 'Wikimedia Commons (no key)' }
+
+function SettingsDialog({ onClose }: { onClose: () => void }) {
+  const [keys, setKeys] = useState({ unsplash: '', pexels: '' })
+  const [active, setActive] = useState<keyof typeof SOURCE_LABEL>('wikimedia')
+  const [saved, setSaved] = useState(false)
+  useEffect(() => {
+    void api.photoKeys().then((k) => {
+      setKeys({ unsplash: k.unsplash, pexels: k.pexels })
+      setActive(k.active)
+    })
+  }, [])
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <form
+        className="modal"
+        onSubmit={async (e) => {
+          e.preventDefault()
+          const k = await api.photoKeys(keys)
+          setActive(k.active)
+          setSaved(true)
+        }}
+      >
+        <h3>Settings</h3>
+        <h4>Photo search</h4>
+        <p>The agent searches for real photos when a design needs them. Unsplash and Pexels have the best photos and need a free API key. Without a key, Chalk uses Wikimedia Commons.</p>
+        <label>Unsplash access key<input value={keys.unsplash} spellCheck={false} placeholder="Create one at unsplash.com/developers" onChange={(e) => { setKeys({ ...keys, unsplash: e.target.value }); setSaved(false) }} /></label>
+        <label>Pexels API key<input value={keys.pexels} spellCheck={false} placeholder="Create one at pexels.com/api" onChange={(e) => { setKeys({ ...keys, pexels: e.target.value }); setSaved(false) }} /></label>
+        <p className="muted">Using: {SOURCE_LABEL[active]}{saved ? ' · Saved' : ''}</p>
+        <div className="modal-actions">
+          <button type="button" onClick={onClose}>Close</button>
+          <button type="submit" className="primary">Save</button>
+        </div>
+      </form>
     </div>
   )
 }

@@ -101,10 +101,11 @@ await check('MCP lists the shared canvas, design, and browser tools', async () =
   const { tools } = await client.listTools()
   assert.deepEqual(tools.map((t) => t.name).sort(), [
     'get_canvas', 'get_frame', 'screenshot_frame', 'review_frame', 'export_frame', 'copy_frame_image', 'create_frame', 'update_frame', 'edit_frame', 'delete_frame',
-    'get_style', 'get_design_guidelines', 'browser_state', 'browser_navigate', 'browser_snapshot', 'browser_click',
+    'get_style', 'get_design_guidelines', 'search_photos', 'browser_state', 'browser_navigate', 'browser_snapshot', 'browser_click',
     'browser_set_device', 'browser_type', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_capture_to_canvas', 'browser_extract_styles'
   ].sort())
   assert.equal(tools.find((t) => t.name === 'get_style').annotations.readOnlyHint, true)
+  assert.equal(tools.find((t) => t.name === 'search_photos').annotations.readOnlyHint, true)
   assert.equal(tools.find((t) => t.name === 'review_frame').annotations.readOnlyHint, true)
 })
 

@@ -4,3 +4,4 @@ e2e-artifacts/
 out/
 dist/
 node_modules/
+.claude/

@@ -11,6 +11,7 @@ import { FrameCommands, frameIdSchema, safeAssetName } from './frameCommands'
 import { Browser } from './browser'
 import { startServer, DEFAULT_PORT } from './server'
 import { createPreview } from './previews'
+import { notePhotoUse, type PhotoKeys } from './photos'
 import { renderUrl } from './render'
 import { randomUUID } from 'node:crypto'
 import type { ToolContext } from './tools'
@@ -33,6 +34,8 @@ interface Config {
   projects: string[]
   recentUrls: string[]
   browserDevice?: BrowserDeviceId
+  /** Optional stock photo API keys. Without them, photo search uses Wikimedia Commons. */
+  photoKeys?: PhotoKeys
 }
 
 const configFile = () => join(app.getPath('userData'), 'config.json')
@@ -41,12 +44,16 @@ const legacyConfigFile = () => join(app.getPath('appData'), 'Easel', 'config.jso
 function readConfig(): Config {
   try {
     const c = JSON.parse(readFileSync(existsSync(configFile()) ? configFile() : legacyConfigFile(), 'utf8'))
-    return { browserDevice: z.enum(BROWSER_DEVICE_IDS).catch('responsive').parse(c.browserDevice), projectDir: c.projectDir, projects: Array.isArray(c.projects) ? c.projects : [], recentUrls: Array.isArray(c.recentUrls) ? c.recentUrls : [] }
+    return { browserDevice: z.enum(BROWSER_DEVICE_IDS).catch('responsive').parse(c.browserDevice), projectDir: c.projectDir, projects: Array.isArray(c.projects) ? c.projects : [], recentUrls: Array.isArray(c.recentUrls) ? c.recentUrls : [], photoKeys: z.object({ unsplash: z.string().min(1).optional(), pexels: z.string().min(1).optional() }).catch({}).parse(c.photoKeys ?? {}) }
   } catch {
     return { projects: [], recentUrls: [] }
   }
 }
 let config: Config = { projects: [], recentUrls: [] }
+const photoKeys = (): PhotoKeys => ({
+  unsplash: process.env.CHALK_UNSPLASH_ACCESS_KEY || config.photoKeys?.unsplash,
+  pexels: process.env.CHALK_PEXELS_API_KEY || config.photoKeys?.pexels
+})
 /** Test runs pin a project with CHALK_PROJECT_DIR and must not touch the user's saved tabs. */
 function updateConfig(patch: Partial<Config>): void {
   config = { ...config, ...patch }
@@ -189,7 +196,22 @@ function exportSelection(format: unknown): void {
 function buildMenu(): void {
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
-      { role: 'appMenu' },
+      {
+        role: 'appMenu',
+        submenu: [
+          { role: 'about' },
+          { type: 'separator' },
+          { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => send('settings:open') },
+          { type: 'separator' },
+          { role: 'services' },
+          { type: 'separator' },
+          { role: 'hide' },
+          { role: 'hideOthers' },
+          { role: 'unhide' },
+          { type: 'separator' },
+          { role: 'quit' }
+        ]
+      },
       {
         label: 'File',
         submenu: [
@@ -360,6 +382,14 @@ function registerIpc(): void {
   handle('frame:export', (_e, id: unknown, format: unknown) => exportFromUi(id, format))
   handle('frame:copy-image', (_e, id: unknown) => copyImageFromUi(id))
   handle('clipboard', (_e, text: string) => clipboard.writeText(text))
+  handle('settings:photoKeys', (_e, next?: unknown) => {
+    if (next !== undefined) {
+      const keys = z.object({ unsplash: z.string().trim().max(200), pexels: z.string().trim().max(200) }).parse(next)
+      updateConfig({ photoKeys: { unsplash: keys.unsplash || undefined, pexels: keys.pexels || undefined } })
+    }
+    const k = photoKeys()
+    return { unsplash: config.photoKeys?.unsplash ?? '', pexels: config.photoKeys?.pexels ?? '', active: k.unsplash ? 'unsplash' : k.pexels ? 'pexels' : 'wikimedia' }
+  })
   handle('project', (_e, action: 'new' | 'open' | 'reveal' | 'switch' | 'close', dir?: string) => {
     if (action === 'reveal') return shell.openPath(store.dir)
     if (action === 'new') return newUntitled()
@@ -424,6 +454,7 @@ app.whenReady().then(async () => {
     store,
     browser,
     origin: () => `http://127.0.0.1:${port}`,
+    photoKeys,
     frameUrl: (f) => `http://127.0.0.1:${port}/frame/${f.id}?v=${f.updatedAt}`,
     measure: async (html, width) => {
       const preview = createPreview(html, `http://127.0.0.1:${port}`)
@@ -438,6 +469,7 @@ app.whenReady().then(async () => {
   agent = new Agent(mcpUrl, () => store.dir)
 
   store.on('change', (doc) => {
+    for (const f of doc.frames) if (f.kind === 'html') notePhotoUse(photoKeys(), f.html)
     send('doc', doc)
     send('element:selection', store.selectedElement)
     send('selection', store.selection)

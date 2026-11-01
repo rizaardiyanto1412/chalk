@@ -163,12 +163,13 @@ export type Arrangement =
   | { kind: 'distribute'; axis: 'x' | 'y' }
   | { kind: 'stack'; direction: Stacking }
 
-export const BROWSER_DEVICE_IDS = ['responsive', 'phone', 'tablet'] as const
+export const BROWSER_DEVICE_IDS = ['responsive', 'phone', 'tablet', 'desktop'] as const
 export type BrowserDeviceId = (typeof BROWSER_DEVICE_IDS)[number]
 export const BROWSER_DEVICES: Record<BrowserDeviceId, { label: string; viewport: { width: number; height: number } | null }> = {
   responsive: { label: 'Responsive', viewport: null },
   phone: { label: 'Phone', viewport: { width: 390, height: 844 } },
-  tablet: { label: 'Tablet', viewport: { width: 1180, height: 820 } }
+  tablet: { label: 'Tablet', viewport: { width: 1180, height: 820 } },
+  desktop: { label: 'Desktop', viewport: { width: 1440, height: 900 } }
 }
 
 export interface BrowserState {
