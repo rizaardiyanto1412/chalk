@@ -1,3 +1,4 @@
+import type { RunSettings, RunProgress } from '../../shared/run'
 import type { AgentConnection, ConnectAgentId } from '../../shared/connectAgents'
 import type { StyleChoice, StyleSummary } from '../../shared/styles'
 import type { PresenceState } from '../../shared/presence'
@@ -53,7 +54,8 @@ export const api = {
   deleteElements: (projectEpoch: number) => e().invoke('element:delete', projectEpoch),
   select: (ids: FrameId[]) => e().invoke('select', ids),
   browser: (action: string, arg?: unknown) => e().invoke('browser', action, arg),
-  sendAgent: (text: string, model: string, style: StyleChoice | null) => e().invoke('agent:send', { text, model, style }),
+  sendAgent: (text: string, model: string, style: StyleChoice | null, parallel?: RunSettings) => e().invoke('agent:send', { text, model, style, ...(parallel ? { parallel } : {}) }),
+  showRunFrame: (id: FrameId) => e().invoke('run:show', id),
   stopAgent: () => e().invoke('agent:stop'),
   newChat: () => e().invoke('chats:new'),
   openChat: (id: string) => e().invoke('chats:open', id),
@@ -68,6 +70,7 @@ export const api = {
   project: (action: 'new' | 'open' | 'reveal' | 'switch' | 'close', dir?: string) => e().invoke('project', action, dir),
   addImage: (img: { name: string; bytes: Uint8Array; x: number; y: number }) => e().invoke('image:add', img),
   on: {
+    runProgress: (fn: (p: RunProgress) => void) => e().on('run:progress', fn),
     edit: (fn: (command: EditCommand) => void) => e().on('edit', fn),
     elementSelection: (fn: (element: SelectedElement[]) => void) => e().on('element:selection', fn),
     selection: (fn: (ids: FrameId[]) => void) => e().on('selection', fn),

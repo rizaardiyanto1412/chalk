@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { randomUUID } from 'node:crypto'
-import { WebContentsView, type BaseWindow, type Rectangle } from 'electron'
+import { BrowserWindow, WebContentsView, type BaseWindow, type Rectangle } from 'electron'
 import { BROWSER_DEVICES, type BrowserDeviceId, type BrowserPick, type BrowserState } from '../shared/model'
 import type { BrowserPresenceAction, PresenceTarget, PresenceVisual } from '../shared/presence'
 import { PRESENCE_CSS, PRESENCE_CURSOR_PATH } from '../shared/presenceVisual'
@@ -119,13 +119,35 @@ export class Browser extends EventEmitter {
   private requestedVisible = false
   private obscured = false
 
-  constructor(device: BrowserDeviceId = 'desktop') {
+  private readonly isolated: boolean
+  private readonly refOwner = randomUUID()
+  private host: BrowserWindow | null = null
+
+  constructor(device: BrowserDeviceId = 'desktop', options: { partition?: string; isolated?: boolean; origin?: string } = {}) {
     super()
     this.device = device
-    this.view = new WebContentsView({ webPreferences: { partition: 'persist:chalk-browser', sandbox: true } })
+    this.isolated = !!options.isolated
+    this.view = new WebContentsView({ webPreferences: { partition: options.partition ?? 'persist:chalk-browser', sandbox: true, ...(this.isolated ? { backgroundThrottling: false } : {}) } })
     this.view.setBackgroundColor('#ffffff')
     this.view.setVisible(false)
     const wc = this.view.webContents
+    if (this.isolated) {
+      const chalkPort = new URL(options.origin ?? 'http://127.0.0.1:7801').port
+      wc.session.webRequest.onBeforeRequest((details, callback) => {
+        const request = new URL(details.url)
+        const host = request.hostname.toLowerCase().replace(/\.$/, '')
+        const local = host === 'localhost' || host.endsWith('.localhost') || /^127\./.test(host) || host === '0.0.0.0' || host === '[::]' || host === '[::1]' || host.startsWith('[::ffff:')
+        callback({ cancel: request.protocol === 'file:' || local || request.port === chalkPort || !['http:', 'https:', 'about:', 'data:', 'blob:'].includes(request.protocol) })
+      })
+      wc.session.on('will-download', event => event.preventDefault())
+      wc.on('will-navigate', (event, url) => { if (!/^https?:/.test(url)) event.preventDefault() })
+      wc.on('will-redirect', (event, url) => { if (!/^https?:/.test(url)) event.preventDefault() })
+      this.host = new BrowserWindow({ show: false, focusable: false, width: 1440, height: 900, webPreferences: { offscreen: true, backgroundThrottling: false, sandbox: true } })
+      this.host.contentView.addChildView(this.view)
+      this.slot = { x: 0, y: 0, width: 1440, height: 900 }
+      this.view.setBounds(this.slot)
+      this.view.setVisible(true)
+    }
     wc.setUserAgent(wc.getUserAgent().replace(/ (Electron|chalk)\/\S+/g, ''))
     for (const ev of ['did-start-loading', 'did-stop-loading', 'did-navigate', 'did-navigate-in-page', 'page-title-updated'] as const) {
       wc.on(ev as 'did-stop-loading', () => {
@@ -143,12 +165,14 @@ export class Browser extends EventEmitter {
         this.overlayObject = null
       }
     })
-    wc.on('did-stop-loading', () => { void this.present(this.presence).catch((error) => console.error('Browser presence failed', error)) })
+    wc.on('did-stop-loading', () => { if (this.isolated) return; void this.present(this.presence).catch((error) => console.error('Browser presence failed', error)) })
     wc.setWindowOpenHandler(({ url }) => {
+      if (this.isolated) return { action: 'deny' }
       void this.navigate(url).catch((error) => console.error('Browser popup navigation failed', error))
       return { action: 'deny' }
     })
     wc.on('console-message', (e) => {
+      if (this.isolated) return
       const message = (e as unknown as { message: string }).message
       const prefix = this.pickPrefix
       if (!prefix || typeof message !== 'string' || !message.startsWith(prefix)) return
@@ -161,6 +185,7 @@ export class Browser extends EventEmitter {
   }
 
   attach(win: BaseWindow): void {
+    if (this.isolated) throw new Error('Private browsers cannot attach to the visible window.')
     win.contentView.addChildView(this.view)
   }
 
@@ -171,6 +196,7 @@ export class Browser extends EventEmitter {
   }
 
   present(visual: PresenceVisual): Promise<void> {
+    if (this.isolated) return Promise.resolve()
     this.presence = visual
     const navigation = this.navigation
     return this.serialize(async () => {
@@ -268,6 +294,8 @@ export class Browser extends EventEmitter {
     this.view.setVisible(v && !this.obscured)
   }
 
+  captureVersion(): number { return this.navigation }
+
   state(): BrowserState {
     const wc = this.view.webContents
     return {
@@ -282,6 +310,7 @@ export class Browser extends EventEmitter {
   }
 
   async navigate(input: string): Promise<BrowserState> {
+    if (this.isolated && /^[a-z]+:/i.test(input) && !/^https?:\/\//i.test(input)) throw new Error('Private browsers allow only public HTTP(S) pages.')
     const url = /^[a-z]+:\/\//i.test(input) ? input : /^localhost|^\d+\.\d+\.\d+\.\d+|^[\w-]+(\.[\w-]+)+(:\d+)?(\/|$)/.test(input) ? `${input.startsWith('localhost') || /^\d/.test(input) ? 'http' : 'https'}://${input}` : `https://www.google.com/search?q=${encodeURIComponent(input)}`
     try {
       await this.view.webContents.loadURL(url)
@@ -320,7 +349,8 @@ export class Browser extends EventEmitter {
   }
 
   snapshot(): Promise<{ url: string; title: string; scrollY: number; pageHeight: number; viewport: string; tree: string }> {
-    return this.serialize(() => this.view.webContents.executeJavaScript(SNAPSHOT_JS))
+    const script = this.isolated ? SNAPSHOT_JS.replace("'e' + (++n)", JSON.stringify(`${this.refOwner}-${this.navigation}-`) + ' + (++n)') : SNAPSHOT_JS
+    return this.serialize(() => this.view.webContents.executeJavaScript(script))
   }
 
   extractStyles(): Promise<Record<string, unknown>> {
@@ -328,6 +358,7 @@ export class Browser extends EventEmitter {
   }
 
   private async withRef<T>(ref: string, js: (sel: string) => string): Promise<T> {
+    if (this.isolated && !new RegExp(`^${this.refOwner}-${this.navigation}-[0-9]+$`).test(ref)) throw new Error('This ref belongs to another browser or navigation. Take a new snapshot.')
     const sel = JSON.stringify(`[data-chalk-ref="${ref}"]`)
     const res = await this.view.webContents.executeJavaScript(
       `(() => { const el = document.querySelector(${sel}); if (!el) return { error: 'No element ${ref}. Take a new browser_snapshot; refs reset after navigation.' }; ${js('el')} })()`
@@ -387,7 +418,21 @@ export class Browser extends EventEmitter {
     })
   }
 
+  async dispose(): Promise<void> {
+    const wc = this.view.webContents
+    const privateSession = wc.session
+    if (!wc.isDestroyed()) wc.close({ waitForBeforeUnload: false })
+    this.host?.destroy()
+    this.host = null
+    await this.operations.catch(() => {})
+    if (this.isolated) {
+      await privateSession.closeAllConnections()
+      await privateSession.clearStorageData()
+    }
+  }
+
   async startPick(): Promise<void> {
+    if (this.isolated) throw new Error('Private browsers have no user pick session.')
     this.picking = true
     this.pickPrefix = `__chalk_pick_${randomUUID()}__`
     this.emit('state', this.state())

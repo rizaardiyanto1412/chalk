@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { runNoticeMetaSchema } from './run'
 import type { AgentEvent } from './model'
 
 export const MAX_CHAT_EVENTS = 2000
@@ -15,7 +16,7 @@ export const agentEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('text'), text }),
   z.object({ type: z.literal('tool'), name: text, summary: text }),
   z.object({ type: z.literal('error'), text }),
-  z.object({ type: z.literal('notice'), text }),
+  z.object({ type: z.literal('notice'), text, run: runNoticeMetaSchema.optional() }),
   z.object({ type: z.literal('done'), costUsd: z.number().finite().nonnegative().optional(), durationMs: z.number().finite().nonnegative().optional() })
 ]) satisfies z.ZodType<AgentEvent>
 

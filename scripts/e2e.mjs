@@ -18,6 +18,7 @@ import { checkElements } from './elements-e2e.mjs'
 import { checkMarquee } from './marquee-e2e.mjs'
 import { checkPresence } from './presence-e2e.mjs'
 import { checkFollow } from './follow-e2e.mjs'
+import { checkParallel } from './parallel-e2e.mjs'
 import { checkChatHistory } from './chat-history-e2e.mjs'
 import { prepareConnectAgents, checkConnectAgents, checkConnectBrowserOverlay } from './connect-agents-e2e.mjs'
 
@@ -576,6 +577,7 @@ await framesClient.close()
 await app.close()
 await checkBrowserDevicePreference({ electron, root, project, artifacts, check })
 await checkChatHistory({ electron, root, artifacts, check })
+await checkParallel({ root, artifacts, check })
 site.close()
 const failed = results.filter((r) => r[0] === 'FAIL').length
 const skipped = results.filter((r) => r[0] === 'SKIP').length

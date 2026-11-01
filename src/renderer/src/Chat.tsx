@@ -1,3 +1,6 @@
+import { foldRuns, type RunProgress } from '../../shared/run'
+import { RunControls, savedRunSettings } from './RunControls'
+import { RunCard } from './RunCard'
 import { useEffect, useRef, useState } from 'react'
 import type { ChatHistoryState } from '../../shared/chats'
 import type { AgentEvent, AgentStatus, BrowserPick, Frame, SelectedElement } from '../../shared/model'
@@ -64,6 +67,18 @@ export function Chat({ history, status, presence, models, claudePath, selectedFr
   const list = useRef<HTMLDivElement>(null)
   const box = useRef<HTMLTextAreaElement>(null)
   const running = status === 'running'
+  const [parallel, setParallel] = useState(savedRunSettings)
+  const [liveProgress, setLiveProgress] = useState<RunProgress | null>(null)
+  const [progress, setProgress] = useState<Record<string, Record<string, string>>>({})
+  const runs = foldRuns(events, running)
+  const lastRun = runs.at(-1)
+  const managed = !!lastRun?.active
+  const stopping = running && liveProgress?.activity === 'Stopping…'
+  useEffect(() => { if (!running) setLiveProgress(null) }, [running])
+  useEffect(() => api.on.runProgress((p: RunProgress) => {
+    setLiveProgress(p)
+    setProgress(previous => ({ ...previous, [p.runId]: { ...previous[p.runId], [p.jobId ?? 'run']: p.activity } }))
+  }), [])
 
   useEffect(() => {
     setMenuOpen(false)
@@ -95,7 +110,7 @@ export function Chat({ history, status, presence, models, claudePath, selectedFr
 
   const send = (t: string) => {
     if (!t.trim() || running) return
-    void api.sendAgent(t.trim(), model, null)
+    void api.sendAgent(t.trim(), model, null, parallel)
     setText('')
   }
 
@@ -162,8 +177,16 @@ export function Chat({ history, status, presence, models, claudePath, selectedFr
             <p>Drop a PNG or JPG onto the canvas, select it, and ask the agent to design in that style.</p>
           </div>
         )}
-        {events.map((e, i) => <Message key={i} ev={e} />)}
-        <AgentPresence presence={presence} models={models} />
+        {events.map((e, i) => {
+          if (e.type === 'notice' && e.run) {
+            const meta = e.run
+            if (meta.kind !== 'planned') return null
+            const view = runs.find(r => r.id === meta.runId)
+            return view ? <RunCard key={view.id} run={view} activity={progress[view.id] ?? {}} live={managed && view === lastRun} /> : null
+          }
+          return <Message key={i} ev={e} />
+        })}
+        <AgentPresence presence={presence} models={models} managed={managed} counts={managed ? `${lastRun.jobs.filter(j => j.state === 'running').length} running, ${lastRun.jobs.filter(j => j.state === 'queued').length} queued` : undefined} />
       </div>
 
       {!claudePath && (
@@ -188,6 +211,7 @@ export function Chat({ history, status, presence, models, claudePath, selectedFr
             {selectedFrames.length > 0 && <button className="chip-clear" onClick={onClearSelection}>Clear</button>}
           </div>
         )}
+        <RunControls value={parallel} onChange={setParallel} disabled={running} />
         <div className="input-box">
           <textarea
             ref={box}
@@ -203,7 +227,7 @@ export function Chat({ history, status, presence, models, claudePath, selectedFr
             }}
           />
           <div className="input-foot">
-            <span className="input-hint">{running ? 'Working…' : 'Enter to send'}</span>
+            <span className="input-hint">{stopping ? 'Stopping…' : running ? 'Working…' : 'Enter to send'}</span>
             <select
               value={model}
               onChange={(e) => {
@@ -215,7 +239,7 @@ export function Chat({ history, status, presence, models, claudePath, selectedFr
               {models.map((m) => <option key={m.id} value={m.id}>{m.label === 'Default' ? 'Default model' : m.label}</option>)}
             </select>
             {running ? (
-              <button className="send is-stop" onClick={() => api.stopAgent()} title="Stop"><Icon name="stop" size={12} /></button>
+              <button className="send is-stop" onClick={() => api.stopAgent()} title="Stop" aria-label="Stop"><Icon name="stop" size={12} /></button>
             ) : (
               <button className="send" onClick={() => send(text)} disabled={!text.trim()} title="Send (Enter)"><Icon name="send" size={14} /></button>
             )}
@@ -226,7 +250,7 @@ export function Chat({ history, status, presence, models, claudePath, selectedFr
   )
 }
 
-function AgentPresence({ presence, models }: Pick<Props, 'presence' | 'models'>) {
+function AgentPresence({ presence, models, managed, counts }: Pick<Props, 'presence' | 'models'> & { managed?: boolean; counts?: string }) {
   const active = presence.turn ?? (presence.visual.phase === 'active' && presence.visual.operation === 'running' ? { ...presence.visual, model: null } : null)
   const since = active?.since
   const [now, setNow] = useState(Date.now)
@@ -238,11 +262,11 @@ function AgentPresence({ presence, models }: Pick<Props, 'presence' | 'models'>)
   }, [since])
   if (!active) return null
   const model = models.find((entry) => entry.id === active.model)?.label ?? active.model
-  return <div className="agent-presence" role="status">
+  return <div className="agent-presence" role={managed ? undefined : 'status'}>
     <span className="presence-dot" />
     <strong>Chalk</strong>
     {model && <span className="presence-model" title={model}>{model}</span>}
-    <span className="presence-activity">{active.activity}</span>
+    <span className="presence-activity">{counts ?? active.activity}</span>
     <span className="presence-elapsed" aria-label="Elapsed time">{elapsedPresence(active.since, now)}</span>
   </div>
 }

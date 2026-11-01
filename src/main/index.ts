@@ -27,11 +27,17 @@ import { z } from 'zod'
 import { CONNECT_LEARN_URL, connectAgentIdSchema } from '../shared/connectAgents'
 import { configLocations, createConnections, type ConnectDeps } from './connectAgents'
 import { findCli } from './agentCli'
+import { Run } from './run'
+import { WorkerRegistry, type PageCapture } from './worker'
+import { isOrdinary, priorRunNote, runSettingsSchema } from '../shared/run'
 
 const store = new Store()
 let win: BrowserWindow | null = null
 let browser: Browser
 let agent: Agent
+let run: Run | null = null
+const registry = new WorkerRegistry()
+const busy = () => agent?.status === 'running' || !!run?.active
 const presence = new Presence()
 let port = Number(process.env.CHALK_PORT) || DEFAULT_PORT
 let server: Server | null = null
@@ -95,7 +101,7 @@ function edit(command: EditCommand): void {
 }
 
 function openProject(dir: string): void {
-  if (dir === store.dir || agent?.status === 'running' || chatDialogOpen) return
+  if (dir === store.dir || busy() || chatDialogOpen) return
   chats.flush()
   store.open(dir)
   updateConfig({ projectDir: dir, projects: config.projects.includes(dir) ? config.projects : [...config.projects, dir] })
@@ -107,7 +113,7 @@ function openProject(dir: string): void {
 }
 
 function closeProject(dir: string): void {
-  if (agent.status === 'running' || chatDialogOpen) return
+  if (busy() || chatDialogOpen) return
   const projects = config.projects.filter((p) => p !== dir)
   if (projects.length === 0) return
   updateConfig({ projects })
@@ -117,7 +123,7 @@ function closeProject(dir: string): void {
 
 /** A new untitled project in ~/Chalk, opened straight away like a new document. */
 function newUntitled(): void {
-  if (agent.status === 'running' || chatDialogOpen) return
+  if (busy() || chatDialogOpen) return
   const root = join(homedir(), 'Chalk')
   let n = 1
   while (existsSync(join(root, n === 1 ? 'Untitled' : `Untitled ${n}`))) n++
@@ -134,7 +140,7 @@ function rememberUrl(url: string): void {
 }
 
 async function chooseProject(create: boolean): Promise<void> {
-  if (!win || agent.status === 'running' || chatDialogOpen) return
+  if (!win || busy() || chatDialogOpen) return
   const res = create
     ? await dialog.showSaveDialog(win, { title: 'New Chalk project', defaultPath: join(homedir(), 'Chalk', 'Untitled'), buttonLabel: 'Create' })
     : await dialog.showOpenDialog(win, { title: 'Open Chalk project folder', defaultPath: join(homedir(), 'Chalk'), properties: ['openDirectory', 'createDirectory'] })
@@ -264,7 +270,7 @@ function buildMenu(): void {
 async function listen(ctx: ToolContext): Promise<void> {
   for (let p = port; p < port + 10; p++) {
     try {
-      server = await startServer(ctx, p)
+      server = await startServer(ctx, p, registry)
       port = p
       return
     } catch (err) {
@@ -317,7 +323,7 @@ function registerIpc(): void {
     browser: browser.state(),
     recentUrls: config.recentUrls,
     tabs: tabs(),
-    agentStatus: agent.status,
+    agentStatus: busy() ? 'running' : 'idle',
     chatHistory: chats.state(),
     presence: presence.state
   }))
@@ -404,20 +410,50 @@ function registerIpc(): void {
     }
   })
   handle('agent:send', (_e, raw: unknown) => {
-    if (agent.status === 'running' || chatDialogOpen) return
+    if (busy() || chatDialogOpen) return
     try {
-      const { text, model, style } = z.object({ text: z.string().trim().min(1), model: z.string(), style: styleChoiceSchema.nullish() }).strict().parse(raw)
+      const { text, model, style, parallel } = z.object({ text: z.string().trim().min(1), model: z.string(), style: styleChoiceSchema.nullish(), parallel: runSettingsSchema.optional() }).strict().parse(raw)
       const resolved = style ? loadStyle({ name: style.id, variant: style.variant }) : null
       if (style && resolved?.id !== style.id) throw new Error('Style attachments require a canonical style ID from the catalog.')
       const selectedFrames = store.selection.flatMap((id) => findFrame(store.doc, id) ?? [])
-      void agent.send(text, { selectedFrames, selectedElements: store.selectedElements, browserPick: store.browserPick, browserUrl: browser.state().url, style: resolved }, model)
+      const turn = { selectedFrames, selectedElements: store.selectedElements, browserPick: store.browserPick, browserUrl: browser.state().url, style: resolved, priorRuns: priorRunNote(chats.current.events, store.doc.frames) ?? undefined }
+      if (!parallel || isOrdinary(parallel)) {
+        void agent.send(text, turn, model)
+        return
+      }
+      const chatId = chats.current.id
+      const emit = (event: AgentEvent) => {
+        if (chats.current.id !== chatId) return
+        chats.append(event)
+        send('agent:event', event)
+      }
+      run = new Run({ store, registry, emit, capturePage, measure: toolContext.measure, origin: toolContext.origin, photoKeys,
+        focus: frameId => send('focus', { mode: 'canvas', frameId, source: 'agent' }),
+        progress: progress => {
+          send('run:progress', progress)
+          presence.dispatch({ type: 'activity', activity: progress.activity })
+        }
+      }, parallel, text, turn, model)
+      const activeRun = run
+      send('agent:status', 'running')
+      presence.dispatch({ type: 'turn-start', since: Date.now(), model: model || null })
+      void activeRun.start().finally(() => {
+        if (run !== activeRun) return
+        chats.flush()
+        presence.dispatch({ type: 'turn-end' })
+        send('agent:status', 'idle')
+      })
     } catch (error) {
       chats.append({ type: 'error', text: `Invalid style or message: ${error instanceof Error ? error.message : String(error)}` })
     }
   })
-  handle('agent:stop', () => agent.stop())
+  handle('run:show', (_e, raw: unknown) => {
+    const id = frameIdSchema.parse(raw)
+    if (findFrame(store.doc, id)) send('focus', { mode: 'canvas', frameId: id })
+  })
+  handle('agent:stop', () => run?.active ? run.stop() : agent.stop())
   const newChat = () => {
-    if (agent.status === 'running' || chatDialogOpen) return
+    if (busy() || chatDialogOpen) return
     chats.new()
     agent.useSession()
   }
@@ -426,13 +462,13 @@ function registerIpc(): void {
   handle('chats:list', () => chats.state())
   handle('chats:open', (_e, raw: unknown) => {
     const id = chatIdSchema.parse(raw)
-    if (agent.status === 'running' || chatDialogOpen) return
+    if (busy() || chatDialogOpen) return
     chats.open(id)
     agent.useSession(chats.current.sessionId)
   })
   handle('chats:delete', async (_e, raw: unknown) => {
     const id = chatIdSchema.parse(raw)
-    if (!win || agent.status === 'running' || chatDialogOpen || !chats.state().chats.some((chat) => chat.id === id)) return
+    if (!win || busy() || chatDialogOpen || !chats.state().chats.some((chat) => chat.id === id)) return
     chatDialogOpen = true
     try {
       const { response } = await dialog.showMessageBox(win, { type: 'warning', message: 'Delete this chat?', detail: 'This removes its saved messages from this project.', buttons: ['Cancel', 'Delete Chat'], defaultId: 0, cancelId: 0, noLink: true })
@@ -444,7 +480,7 @@ function registerIpc(): void {
     }
   })
   handle('chats:clear', async () => {
-    if (!win || agent.status === 'running' || chatDialogOpen) return
+    if (!win || busy() || chatDialogOpen) return
     chatDialogOpen = true
     try {
       const { response } = await dialog.showMessageBox(win, { type: 'warning', message: 'Clear Agent History?', detail: 'This removes all saved chats from this project.', buttons: ['Cancel', 'Clear Agent History'], defaultId: 0, cancelId: 0, noLink: true })
@@ -491,6 +527,32 @@ function registerIpc(): void {
     store.dispatch({ type: 'add', frame: { id, kind: 'image', asset, name: name.replace(/\.[a-z]+$/i, ''), x: Math.round(x), y: Math.round(y), width, height, updatedAt: Date.now() } })
     return id
   })
+}
+
+async function capturePage(): Promise<PageCapture | null> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const before = browser.state()
+    const version = browser.captureVersion()
+    if (!/^https?:/.test(before.url)) {
+      if (attempt) throw new Error('The visible browser left its HTTP(S) page during reference capture.')
+      return null
+    }
+    try {
+      const snapshot = await browser.snapshot()
+      const styles = await browser.extractStyles()
+      const shot = await browser.screenshot({ fullPage: true })
+      const after = browser.state()
+      if (version !== browser.captureVersion() || before.url !== after.url || snapshot.url !== before.url) {
+        if (!attempt) continue
+        throw new Error('The visible browser navigated during reference capture. Send again when the page is ready.')
+      }
+      return Object.freeze({ url: before.url, title: snapshot.title, tree: snapshot.tree, styles: structuredClone(styles), png: Buffer.from(shot.png), width: shot.width, height: shot.height })
+    } catch (error) {
+      if (!attempt && (version !== browser.captureVersion() || browser.state().url !== before.url)) continue
+      throw new Error(`Could not capture the visible browser reference: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  throw new Error('The visible browser kept navigating during reference capture.')
 }
 
 let toolContext: ToolContext
@@ -599,6 +661,7 @@ app.whenReady().then(async () => {
 app.on('before-quit', () => {
   store.flush()
   chats.flush()
+  run?.stop()
   agent?.stop()
   server?.close()
 })

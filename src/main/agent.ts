@@ -8,6 +8,7 @@ import { AGENT_SYSTEM, STYLE_PRECEDENCE } from './prompt'
 import { TOOL_NAMES } from './tools'
 
 export interface TurnContext {
+  priorRuns?: string
   selectedFrames: Frame[]
   selectedElements: SelectedElement[]
   browserPick: BrowserPick | null
@@ -28,6 +29,7 @@ export function contextBlock(c: TurnContext): string {
     lines.push(`The user picked this element in the browser (${p.url}): <${p.tag}> at ${p.selector}, ${Math.round(p.rect.width)}×${Math.round(p.rect.height)}px. Text: "${p.text.slice(0, 200)}". HTML (trimmed):\n${p.outerHTML.slice(0, 2000)}`)
   }
   if (c.style) lines.push(`${STYLE_PRECEDENCE}\n<chosen-style>\n${JSON.stringify(c.style)}\n</chosen-style>`)
+  if (c.priorRuns) lines.push(c.priorRuns)
   return lines.length ? `<context>\n${lines.join('\n')}\n</context>\n\n` : ''
 }
 

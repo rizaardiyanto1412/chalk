@@ -1,3 +1,5 @@
+import type { RunNoticeMeta } from './run'
+export type { RunNoticeMeta } from './run'
 export type FrameId = string & { readonly __brand: 'FrameId' }
 
 interface FrameBase {
@@ -141,7 +143,7 @@ export type AgentEvent =
   | { type: 'text'; text: string }
   | { type: 'tool'; name: string; summary: string }
   | { type: 'error'; text: string }
-  | { type: 'notice'; text: string }
+  | { type: 'notice'; text: string; run?: RunNoticeMeta }
   | { type: 'done'; costUsd?: number; durationMs?: number }
 
 export type AgentStatus = 'idle' | 'running'

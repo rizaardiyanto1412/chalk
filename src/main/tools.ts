@@ -63,13 +63,13 @@ const tool = <S extends z.ZodRawShape>(t: Tool<S>): Tool => ({
   }
 }) as unknown as Tool
 
-const text = (value: unknown): Content => ({ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) })
+export const text = (value: unknown): Content => ({ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) })
 
 const MAX_EDGE = 7800
 const MAX_BYTES = 3_500_000
 
 /** Keep images inside the model's size limits: scale down tall captures, then JPEG, then shrink until it fits. */
-function image(png: Buffer): Content {
+export function image(png: Buffer): Content {
   const src = nativeImage.createFromBuffer(png)
   const { width, height } = src.getSize()
   let scale = Math.min(1, MAX_EDGE / Math.max(width, height))
@@ -84,7 +84,7 @@ function image(png: Buffer): Content {
   return { type: 'image', data: jpeg.toString('base64'), mimeType: 'image/jpeg' }
 }
 
-function frameSummary(f: Frame) {
+export function frameSummary(f: Frame) {
   return { id: f.id, name: f.name, kind: f.kind, x: f.x, y: f.y, width: f.width, height: f.height, ...(f.kind === 'image' ? { sourceUrl: f.sourceUrl } : {}) }
 }
 
@@ -102,7 +102,7 @@ function requireHtml(ctx: ToolContext, id: string): HtmlFrame {
 
 const fitted = async (ctx: ToolContext, html: string, width: number) => Math.max(100, await ctx.measure(html, width))
 
-function applyEdits(source: string, edits: { find: string; replace: string }[]): string {
+export function applyEdits(source: string, edits: { find: string; replace: string }[]): string {
   let html = source
   for (const [i, e] of edits.entries()) {
     const at = html.indexOf(e.find)
@@ -113,7 +113,7 @@ function applyEdits(source: string, edits: { find: string; replace: string }[]):
   return html
 }
 
-const newId = () => randomUUID().slice(0, 8) as FrameId
+export const newId = () => randomUUID().slice(0, 8) as FrameId
 
 export const TOOLS: Tool[] = [
   tool({

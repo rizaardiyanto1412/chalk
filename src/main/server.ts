@@ -11,12 +11,14 @@ import { CANVAS_ELEMENT_SCRIPT } from './canvasElements'
 import { STYLE_PRECEDENCE } from './prompt'
 import { styleInputSchema } from './styles'
 import { previews } from './previews'
+import { WorkerRegistry } from './worker'
+import { workerTools } from './workerTools'
 
 export const DEFAULT_PORT = 7801
 
 const TAILWIND_JS = readFileSync(createRequire(import.meta.url).resolve('@tailwindcss/browser'), 'utf8')
 
-function buildMcp(ctx: ToolContext): McpServer {
+function buildMcp<C>(tools: { name: string; description: string; input: import('zod').z.ZodRawShape; readOnly?: boolean; run: (args: never, ctx: C) => Promise<import('./tools').Content[]> }[], ctx: C): McpServer {
   const server = new McpServer(
     { name: 'chalk', version: '0.1.0' },
     {
@@ -24,7 +26,7 @@ function buildMcp(ctx: ToolContext): McpServer {
         STYLE_PRECEDENCE + ' Chalk is a canvas design app on this Mac. Start with get_canvas and get_design_guidelines for the screen type and current project DESIGN.md. Inspect selected references with screenshot_frame; read HTML designs with get_frame (standalone=true returns a full document). Preserve user references and brand rules. For a new design without a visual direction, list and load an original style with get_style. Reuse its semantic tokens across screens. After creating or changing a frame, call review_frame and inspect both its image and layout diagnostics, then fix issues and recheck. Before finishing, verify totals, percentages, and other arithmetic on screen with check_numbers. When asked to build a design in code, reproduce the frame exactly in the project\'s own stack.'
     }
   )
-  for (const t of TOOLS) {
+  for (const t of tools) {
     server.registerTool(
       t.name,
       { description: t.description, inputSchema: t.name === 'get_style' ? styleInputSchema : t.input, annotations: { readOnlyHint: !!t.readOnly } },
@@ -52,14 +54,17 @@ function send(res: ServerResponse, status: number, type: string, body: string | 
  * assets for the canvas and the renderer. Only loopback Host headers are accepted, and /mcp refuses
  * browser requests (they carry an Origin header) so a web page cannot drive the tools.
  */
-export function startServer(ctx: ToolContext, port: number): Promise<Server> {
+export function startServer(ctx: ToolContext, port: number, registry = new WorkerRegistry()): Promise<Server> {
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     if (!LOCAL_HOST.test(req.headers.host ?? '')) return send(res, 403, 'text/plain', 'forbidden host')
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
 
-    if (url.pathname === '/mcp') {
+    if (url.pathname === '/mcp' || url.pathname === '/mcp/worker') {
       if (req.headers.origin) return send(res, 403, 'text/plain', 'browser requests are not allowed')
-      const server = buildMcp(ctx)
+      const token = /^Bearer ([\w-]{43})$/.exec(req.headers.authorization ?? '')?.[1]
+      const worker = token ? registry.get(token) : undefined
+      if (url.pathname === '/mcp/worker' && !worker) return send(res, 401, 'text/plain', 'unknown or expired worker')
+      const server = url.pathname === '/mcp/worker' && worker ? buildMcp(workerTools(worker), worker) : buildMcp(TOOLS, ctx)
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })
       res.on('close', () => {
         void transport.close()
