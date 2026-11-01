@@ -66,7 +66,8 @@ interface FrameSnapshot {
 }
 
 export class FrameCommands {
-  private snapshot: FrameSnapshot | null = null
+  /** Shared by every project tab, so frames copied in one tab paste into another. */
+  private static snapshot: FrameSnapshot | null = null
   private pending: Promise<void> = Promise.resolve()
 
   constructor(private store: Store, private select: (ids: FrameId[], focus?: boolean) => void) {}
@@ -127,7 +128,7 @@ export class FrameCommands {
         case 'cut': {
           if (!captured) return
           await clipboard.write([new ClipboardItem({ [MIME]: captured.token, 'text/plain': frames.map((f) => f.name).join('\n') })])
-          this.snapshot = captured
+          FrameCommands.snapshot = captured
           if (command.type === 'cut') {
             checkProject()
             if (store.doc !== doc) throw new Error('Frames changed during Cut. They were copied but have not been deleted.')
@@ -137,7 +138,7 @@ export class FrameCommands {
           return
         }
         case 'paste': {
-          const snapshot = this.snapshot
+          const snapshot = FrameCommands.snapshot
           if (!snapshot) return
           const items = await clipboard.read()
           const item = items.find((entry) => entry.types.includes(MIME) || entry.types.includes(OS_MIME))

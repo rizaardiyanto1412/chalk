@@ -54,13 +54,23 @@ function send(res: ServerResponse, status: number, type: string, body: string | 
  * assets for the canvas and the renderer. Only loopback Host headers are accepted, and /mcp refuses
  * browser requests (they carry an Origin header) so a web page cannot drive the tools.
  */
-export function startServer(ctx: ToolContext, port: number, registry = new WorkerRegistry()): Promise<Server> {
+/** Every open project has a tool context. External agents use the visible project; each in-app agent uses its own. */
+export interface ContextResolver {
+  active: () => ToolContext
+  byToken: (token: string) => ToolContext | undefined
+  all: () => ToolContext[]
+}
+
+export function startServer(contexts: ContextResolver, port: number, registry = new WorkerRegistry()): Promise<Server> {
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     if (!LOCAL_HOST.test(req.headers.host ?? '')) return send(res, 403, 'text/plain', 'forbidden host')
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
 
-    if (url.pathname === '/mcp' || url.pathname === '/mcp/worker') {
+    const projectMcp = /^\/mcp\/project\/([\w-]{36})$/.exec(url.pathname)
+    if (url.pathname === '/mcp' || url.pathname === '/mcp/worker' || projectMcp) {
       if (req.headers.origin) return send(res, 403, 'text/plain', 'browser requests are not allowed')
+      const ctx = projectMcp ? contexts.byToken(projectMcp[1]) : contexts.active()
+      if (!ctx) return send(res, 404, 'text/plain', 'project is closed')
       const token = /^Bearer ([\w-]{43})$/.exec(req.headers.authorization ?? '')?.[1]
       const worker = token ? registry.get(token) : undefined
       if (url.pathname === '/mcp/worker' && !worker) return send(res, 401, 'text/plain', 'unknown or expired worker')
@@ -82,6 +92,9 @@ export function startServer(ctx: ToolContext, port: number, registry = new Worke
     }
     if (url.pathname === '/vendor/tailwind.js') return send(res, 200, 'text/javascript', TAILWIND_JS)
     const frameMatch = url.pathname.match(/^\/frame\/([\w-]+)$/)
+    const assetMatch = url.pathname.match(/^\/assets\/([\w.-]+)$/)
+    // Frame and asset ids are random, so look them up across every open project: background agents render their own.
+    const ctx = contexts.all().find((c) => (frameMatch ? findFrame(c.store.doc, frameMatch[1]) : assetMatch && existsSync(c.store.assetPath(basename(assetMatch[1]))))) ?? contexts.active()
     if (frameMatch) {
       const f = findFrame(ctx.store.doc, frameMatch[1])
       if (!f) return send(res, 404, 'text/plain', 'no such frame')
@@ -89,7 +102,6 @@ export function startServer(ctx: ToolContext, port: number, registry = new Worke
       const html = frameDocument(f, '/vendor/tailwind.js')
       return send(res, 200, 'text/html; charset=utf-8', url.searchParams.get('canvas') === '1' ? html.replace('<head>', `<head>${CANVAS_ELEMENT_SCRIPT}`) : html)
     }
-    const assetMatch = url.pathname.match(/^\/assets\/([\w.-]+)$/)
     if (assetMatch) {
       const file = ctx.store.assetPath(basename(assetMatch[1]))
       if (!existsSync(file)) return send(res, 404, 'text/plain', 'no such asset')

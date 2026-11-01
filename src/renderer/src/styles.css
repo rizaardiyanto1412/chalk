@@ -42,6 +42,9 @@ body.is-resizing iframe { pointer-events: none; }
 .tab-close { width: 16px; height: 16px; display: grid; place-items: center; border-radius: 4px; opacity: 0; color: var(--muted); }
 .tab:hover .tab-close, .tab.is-on .tab-close { opacity: 1; }
 .tab-close:hover { background: rgb(0 0 0 / 0.06); }
+.tab-busy { flex-shrink: 0; width: 13px; height: 13px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--accent) 25%, transparent); border-top-color: var(--accent); animation: tab-spin .8s linear infinite; }
+@keyframes tab-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .tab-busy { animation: none; border-color: var(--accent); } }
 .tab-add { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 7px; color: var(--muted); }
 .tab-add:hover { background: rgb(0 0 0 / 0.05); color: var(--text); }
 .titlebar-right { display: flex; align-items: center; gap: 6px; }

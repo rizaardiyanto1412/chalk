@@ -166,7 +166,7 @@ export async function checkChatHistory({ electron, root, artifacts, check }) {
       assert.equal(await win.locator('.msg-notice').count(), notices)
       assert.match(await win.locator('.msg-error').last().innerText(), /Agent stopped: error_during_execution/)
     })
-    await check('running turns save on debounce and block New, chat switches, project switches, and overlapping turns', async () => {
+    await check('running turns save on debounce, block New, chat switches, and overlapping turns, and keep running in a background tab', async () => {
       const count = logs().filter(item => item.type === 'spawn').length
       await invoke('agent:send', { text: '[history-slow] Keep this turn in its chat.', model: 'sonnet' })
       await win.waitForSelector('.agent-presence')
@@ -175,6 +175,11 @@ export async function checkChatHistory({ electron, root, artifacts, check }) {
       await invoke('chats:new')
       await invoke('chats:open', second)
       await invoke('project', 'switch', other)
+      assert.equal((await invoke('init')).project.dir, other, 'tabs switch while the agent works')
+      assert.equal((await invoke('init')).agentStatus, 'idle', 'the other tab has its own idle agent')
+      await win.waitForFunction(dir => document.querySelector(`.tab.is-busy[title^="${dir}"]`), project)
+      await invoke('project', 'switch', project)
+      assert.equal((await invoke('init')).agentStatus, 'running')
       await invoke('agent:send', { text: 'This overlapping turn must not run.', model: '' })
       await win.waitForSelector('.presence-model')
       await win.waitForTimeout(300)

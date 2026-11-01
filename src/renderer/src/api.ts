@@ -35,6 +35,8 @@ export interface InitState {
 export interface ProjectTab {
   dir: string
   name: string
+  /** An agent or design run is working in this tab, possibly in the background. */
+  busy?: boolean
 }
 
 export type FocusTarget = { mode: 'canvas'; frameId?: FrameId; source?: 'agent' } | { mode: 'browser'; source?: 'agent' }

@@ -181,13 +181,14 @@ export function App() {
           <span className="brand"><span className="brand-mark" /> Chalk</span>
           <nav className="tabs">
             {tabs.map((t) => (
-              <div key={t.dir} className={`tab ${t.dir === project.dir ? 'is-on' : ''}`} title={t.dir} aria-disabled={status === 'running'} onClick={() => { if (status !== 'running') void api.project('switch', t.dir) }}>
-                <Icon name="file" size={13} />
+              <div key={t.dir} className={`tab ${t.dir === project.dir ? 'is-on' : ''} ${t.busy ? 'is-busy' : ''}`} title={t.busy ? `${t.dir} · agent working` : t.dir} onClick={() => void api.project('switch', t.dir)}>
+                {t.busy ? <span className="tab-busy" aria-label="Agent working" /> : <Icon name="file" size={13} />}
                 <span>{t.name}</span>
                 {tabs.length > 1 && (
                   <button
                     className="tab-close"
-                    disabled={status === 'running'}
+                    disabled={t.busy}
+                    title={t.busy ? 'Stop the agent in this tab before closing it' : undefined}
                     aria-label={`Close ${t.name}`}
                     onClick={(e) => {
                       e.stopPropagation()
@@ -199,7 +200,7 @@ export function App() {
                 )}
               </div>
             ))}
-            <button disabled={status === 'running'} className="tab-add" title="New project (⌘N)" aria-label="New project" onClick={() => api.project('new')}><Icon name="plus" size={14} /></button>
+            <button className="tab-add" title="New project (⌘N)" aria-label="New project" onClick={() => api.project('new')}><Icon name="plus" size={14} /></button>
           </nav>
           <div className="titlebar-right">
             <ConnectButton mcpUrl={init.mcpUrl} />

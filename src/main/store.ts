@@ -8,6 +8,9 @@ const DOC_FILE = 'chalk.json'
 /** Projects saved before the app was renamed from Easel. Read once, then saved as chalk.json. */
 const LEGACY_DOC_FILE = 'easel.json'
 
+/** Shared across stores so every open project, and every reopen, gets a distinct epoch. */
+let epochs = 0
+
 export class Store extends EventEmitter {
   doc: Doc = emptyDoc()
   dir = ''
@@ -18,12 +21,13 @@ export class Store extends EventEmitter {
   private saveTimer: NodeJS.Timeout | null = null
   private past: Doc[] = []
   private future: Doc[] = []
+  private closed = false
 
   open(dir: string): void {
     this.flush()
     mkdirSync(join(dir, 'assets'), { recursive: true })
     this.dir = dir
-    this.projectEpoch++
+    this.projectEpoch = ++epochs
     try {
       const file = [DOC_FILE, LEGACY_DOC_FILE].map((f) => join(dir, f)).find((f) => existsSync(f)) ?? join(dir, DOC_FILE)
       this.doc = parseDoc(JSON.parse(readFileSync(file, 'utf8')))
@@ -38,6 +42,7 @@ export class Store extends EventEmitter {
   }
 
   dispatch(input: Op | Op[]): Doc {
+    if (this.closed) throw new Error('The project changed. Run the frame command again.')
     let next = this.doc
     const now = Date.now()
     for (const op of Array.isArray(input) ? input : [input]) {
@@ -63,6 +68,7 @@ export class Store extends EventEmitter {
 
   /** Step through history. Returns false when there is nothing to undo or redo. */
   travel(direction: 'undo' | 'redo'): boolean {
+    if (this.closed) return false
     const [from, to] = direction === 'undo' ? [this.past, this.future] : [this.future, this.past]
     const target = from.pop()
     if (!target) return false
@@ -72,6 +78,16 @@ export class Store extends EventEmitter {
     this.emit('change', this.doc)
     this.scheduleSave()
     return true
+  }
+
+  /**
+   * Save and retire this store. A new epoch makes in-flight commands fail their project check, and later writes
+   * are refused, so work from a closed tab can never overwrite the file a newer store now owns.
+   */
+  close(): void {
+    this.flush()
+    this.closed = true
+    this.projectEpoch = ++epochs
   }
 
   assetPath(name: string): string {
