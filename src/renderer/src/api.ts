@@ -36,7 +36,7 @@ export interface ProjectTab {
   name: string
 }
 
-export type FocusTarget = { mode: 'canvas'; frameId?: FrameId } | { mode: 'browser' }
+export type FocusTarget = { mode: 'canvas'; frameId?: FrameId; source?: 'agent' } | { mode: 'browser'; source?: 'agent' }
 
 const e = () => window.chalk
 

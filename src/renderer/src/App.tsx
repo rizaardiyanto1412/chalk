@@ -33,6 +33,21 @@ export function App() {
   const [pick, setPick] = useState<BrowserPick | null>(null)
   const [chatHistory, setChatHistory] = useState<ChatHistoryState | null>(null)
   const [status, setStatus] = useState<AgentStatus>('idle')
+  const [followPaused, setFollowPaused] = useState(false)
+  const agentFrame = useRef<FrameId | null>(null)
+  const followIdle = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  // Each new agent run follows its work again until the user moves the canvas.
+  useEffect(() => {
+    if (status === 'running') canvas.current?.armFollow()
+    setFollowPaused(false)
+  }, [status])
+
+  const followAgent = useCallback(() => {
+    canvas.current?.armFollow()
+    setFollowPaused(false)
+    if (agentFrame.current) canvas.current?.focusFrame(agentFrame.current)
+  }, [])
   const [presence, setPresence] = useState(idlePresence)
   const [zoom, setZoom] = useState(1)
   const [exportActivity, setExportActivity] = useState<ExportActivity | null>(null)
@@ -94,7 +109,12 @@ export function App() {
         if (t.mode === 'browser') return openBrowser(true)
         if (t.frameId) {
           const id = t.frameId
-          setTimeout(() => canvas.current?.focusFrame(id), 30)
+          if (t.source !== 'agent') return void setTimeout(() => canvas.current?.focusFrame(id), 30)
+          agentFrame.current = id
+          clearTimeout(followIdle.current)
+          // Agents connected over MCP have no run boundary; drop the prompt once they go quiet.
+          followIdle.current = setTimeout(() => setFollowPaused(false), 30_000)
+          setTimeout(() => { if (canvas.current?.followFrame(id) === false) setFollowPaused(true) }, 30)
         }
       })
     ]
@@ -250,6 +270,9 @@ export function App() {
                 <span>{frameError}</span>
                 <button aria-label="Dismiss frame notice" onClick={() => setFrameError(null)}><Icon name="x" size={12} /></button>
               </div>
+            )}
+            {followPaused && (
+              <button className="follow-agent" onClick={followAgent}><Icon name="pointer" size={13} />Follow agent</button>
             )}
             <div className="zoom-controls">
               <button aria-label="Zoom out" onClick={() => canvas.current?.zoomBy(0.8)}><Icon name="minus" size={14} /></button>

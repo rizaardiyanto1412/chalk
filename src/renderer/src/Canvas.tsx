@@ -27,6 +27,9 @@ type Draft = Partial<Record<FrameId, Partial<Pick<Frame, 'x' | 'y' | 'width' | '
 
 export interface CanvasHandle {
   focusFrame: (id: FrameId) => void
+  /** Bring the agent's frame into view, unless the user has moved around the canvas since following was armed. Returns false when it held still for the user. */
+  followFrame: (id: FrameId) => boolean
+  armFollow: () => void
   fit: () => void
   zoomBy: (k: number) => void
 }
@@ -68,6 +71,10 @@ const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
 export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, port, projectEpoch, selection, selectedElements, onSelect, onZoom, tool, exportBusy, presence }, ref) {
   const host = useRef<HTMLDivElement>(null)
   const [cam, setCam] = useState<Camera>({ x: 80, y: 80, zoom: 0.5 })
+  const camRef = useRef(cam)
+  camRef.current = cam
+  /** Set once the user scrolls, zooms, or clicks the canvas; the agent then stops moving the camera. */
+  const userMoved = useRef(false)
   const elements = useCanvasElements(doc, selectedElements, projectEpoch)
   const marqueeVersion = useRef(0)
   const [marqueeRect, setMarqueeRect] = useState<ElementRect | null>(null)
@@ -149,13 +156,29 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
     })
   }, [])
 
+  const focusFrame = useCallback((id: FrameId) => {
+    const f = docRef.current.frames.find((fr) => fr.id === id)
+    if (f) fitRect({ x: f.x, y: f.y, width: f.width, height: Math.min(f.height, f.width * 1.2) }, 0.9)
+  }, [fitRect])
+
   useImperativeHandle(ref, () => ({
-    fit,
-    zoomBy,
-    focusFrame: (id) => {
+    fit: () => { userMoved.current = true; fit() },
+    zoomBy: (k) => { userMoved.current = true; zoomBy(k) },
+    focusFrame,
+    followFrame: (id) => {
+      if (userMoved.current) return false
       const f = docRef.current.frames.find((fr) => fr.id === id)
-      if (f) fitRect({ x: f.x, y: f.y, width: f.width, height: Math.min(f.height, f.width * 1.2) }, 0.9)
-    }
+      const el = host.current
+      if (!f || !el) return true
+      const c = camRef.current
+      const left = f.x * c.zoom + c.x
+      const top = f.y * c.zoom + c.y
+      const shown = (Math.min(el.clientWidth, left + f.width * c.zoom) - Math.max(0, left)) / (f.width * c.zoom)
+      const startsInView = top >= 0 && top < el.clientHeight * 0.6
+      if (shown < 0.9 || !startsInView) focusFrame(id)
+      return true
+    },
+    armFollow: () => { userMoved.current = false }
   }))
 
   const fitted = useRef(false)
@@ -171,6 +194,7 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
     if (!el) return
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
+      userMoved.current = true
       const rect = el.getBoundingClientRect()
       const px = e.clientX - rect.left
       const py = e.clientY - rect.top
@@ -221,15 +245,19 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
         } else onSelect([])
       } else if ((e.metaKey && e.key === '0') || (e.shiftKey && e.key === '!')) {
         e.preventDefault()
+        userMoved.current = true
         fit()
       } else if (e.metaKey && (e.key === '=' || e.key === '+')) {
         e.preventDefault()
+        userMoved.current = true
         zoomBy(1.25)
       } else if (e.metaKey && e.key === '-') {
         e.preventDefault()
+        userMoved.current = true
         zoomBy(0.8)
       } else if (e.shiftKey && e.key === '@' && selection[0]) {
         const f = doc.frames.find((fr) => fr.id === selection[0])
+        userMoved.current = true
         if (f) fitRect(f, 1)
       }
     }
@@ -272,6 +300,7 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
     const frameEl = target.closest<HTMLElement>('[data-frame-id]')
     const handle = target.closest<HTMLElement>('[data-handle]')
     if (target.closest('[data-toolbar]') || e.button > 1) return
+    userMoved.current = true
     cancelGesture()
     host.current?.focus()
     window.getSelection()?.removeAllRanges()

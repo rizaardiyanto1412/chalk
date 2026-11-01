@@ -17,6 +17,7 @@ import { checkArrangement } from './arrangement-e2e.mjs'
 import { checkElements } from './elements-e2e.mjs'
 import { checkMarquee } from './marquee-e2e.mjs'
 import { checkPresence } from './presence-e2e.mjs'
+import { checkFollow } from './follow-e2e.mjs'
 import { checkChatHistory } from './chat-history-e2e.mjs'
 import { prepareConnectAgents, checkConnectAgents, checkConnectBrowserOverlay } from './connect-agents-e2e.mjs'
 
@@ -105,6 +106,8 @@ await check('UI boots with the agent panel, tool strip, project tab, and browser
 await checkConnectAgents({ app, win, check, artifacts, port: PORT, agents })
 
 await checkPresence({ app, win, client, call, json, check, artifacts, agentTab })
+
+await checkFollow({ win, client, call, json, check, artifacts })
 
 await check('MCP lists the shared canvas, design, and browser tools', async () => {
   const { tools } = await client.listTools()

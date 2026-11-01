@@ -549,7 +549,7 @@ app.whenReady().then(async () => {
         preview.dispose()
       }
     },
-    focus: (target) => send('focus', target)
+    focus: (target) => send('focus', { ...target, source: 'agent' })
   }
   agent = new Agent(mcpUrl, () => store.dir)
   chats.openProject(store.dir)
