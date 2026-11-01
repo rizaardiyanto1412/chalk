@@ -119,6 +119,16 @@ export interface BrowserPick {
   outerHTML: string
 }
 
+export interface SelectedElement {
+  frameId: FrameId
+  frameName: string
+  path: number[]
+  tag: string
+  text: string
+  rect: { x: number; y: number; width: number; height: number }
+  outerHTML: string
+}
+
 export interface Selection {
   frameIds: FrameId[]
   browserPick: BrowserPick | null

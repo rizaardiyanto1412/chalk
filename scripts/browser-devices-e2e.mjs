@@ -197,7 +197,7 @@ export async function checkBrowserDevicePreference({ electron, root, project, ar
   await check('viewport preference parses invalid saved values and restores the latest choice after restart', async () => {
     const profile = realpathSync(mkdtempSync(join(tmpdir(), 'chalk-device-preference-')))
     writeFileSync(join(profile, 'config.json'), JSON.stringify({ projectDir: project, projects: [project], recentUrls: [], browserDevice: 'unknown-device' }))
-    const launch = () => electron.launch({ args: [root, `--user-data-dir=${profile}`], cwd: root, env: { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !['ELECTRON_RUN_AS_NODE', 'CHALK_PROJECT_DIR'].includes(key))), CHALK_PORT: '7913', ELECTRON_RENDERER_URL: '' } })
+    const launch = () => electron.launch({ args: [root, `--user-data-dir=${profile}`], cwd: root, env: { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !['ELECTRON_RUN_AS_NODE', 'CHALK_PROJECT_DIR'].includes(key))), CHALK_PORT: String((Number(process.env.CHALK_PORT) || 7911) + 2), ELECTRON_RENDERER_URL: '' } })
     let instance
     const init = async () => {
       instance = await launch()

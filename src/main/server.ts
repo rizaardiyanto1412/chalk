@@ -7,6 +7,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { findFrame } from '../shared/model'
 import { TOOLS, type ToolContext } from './tools'
 import { frameDocument } from './frameHtml'
+import { CANVAS_ELEMENT_SCRIPT } from './canvasElements'
 import { STYLE_PRECEDENCE } from './prompt'
 import { styleInputSchema } from './styles'
 import { previews } from './previews'
@@ -80,7 +81,8 @@ export function startServer(ctx: ToolContext, port: number): Promise<Server> {
       const f = findFrame(ctx.store.doc, frameMatch[1])
       if (!f) return send(res, 404, 'text/plain', 'no such frame')
       if (f.kind === 'image') return send(res, 200, 'text/html', `<!doctype html><body style="margin:0"><img src="/assets/${f.asset}" style="display:block;width:100%">`)
-      return send(res, 200, 'text/html; charset=utf-8', frameDocument(f, '/vendor/tailwind.js'))
+      const html = frameDocument(f, '/vendor/tailwind.js')
+      return send(res, 200, 'text/html; charset=utf-8', url.searchParams.get('canvas') === '1' ? html.replace('<head>', `<head>${CANVAS_ELEMENT_SCRIPT}`) : html)
     }
     const assetMatch = url.pathname.match(/^\/assets\/([\w.-]+)$/)
     if (assetMatch) {

@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { homedir } from 'node:os'
 import { query } from '@anthropic-ai/claude-agent-sdk'
-import type { AgentEvent, AgentStatus, BrowserPick, Frame } from '../shared/model'
+import type { AgentEvent, AgentStatus, BrowserPick, Frame, SelectedElement } from '../shared/model'
 import type { ResolvedStyle } from './styles'
 import { AGENT_SYSTEM, STYLE_PRECEDENCE } from './prompt'
 import { TOOL_NAMES } from './tools'
@@ -23,6 +23,7 @@ export function findClaude(): string | null {
 
 export interface TurnContext {
   selectedFrames: Frame[]
+  selectedElement: SelectedElement | null
   browserPick: BrowserPick | null
   browserUrl: string
   style: ResolvedStyle | null
@@ -32,6 +33,7 @@ export interface TurnContext {
 export function contextBlock(c: TurnContext): string {
   const lines: string[] = []
   if (c.selectedFrames.length) lines.push(`Selected frames: ${c.selectedFrames.map((f) => `"${f.name}" (id ${f.id}, ${f.kind})`).join(', ')}`)
+  if (c.selectedElement) lines.push(`Selected canvas element (path uses element child indexes from body, CSS pixel rect, stored HTML trimmed):\n${JSON.stringify(c.selectedElement)}`)
   const references = c.selectedFrames.filter((f) => f.kind === 'image')
   if (references.length) lines.push(`Selected image references: ${references.map((f) => f.id).join(', ')}. View each with screenshot_frame before designing.`)
   if (c.browserUrl && !c.browserUrl.startsWith('about:')) lines.push(`Built-in browser is on: ${c.browserUrl}`)

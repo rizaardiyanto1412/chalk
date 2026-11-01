@@ -170,7 +170,7 @@ export async function checkExports({ app, win, client, call, json, check, projec
     })
 
     await check('private exports block dynamic asset requests through loopback aliases', async () => {
-      const urls = ['x.localhost', 'localhost.', '127.0.0.2', '0.0.0.0', '[::ffff:7f00:1]', '127.0.0.1'].map((host) => `http://${host}:7911/assets/export-source.png`)
+      const urls = ['x.localhost', 'localhost.', '127.0.0.2', '0.0.0.0', '[::ffff:7f00:1]', '127.0.0.1'].map((host) => `http://${host}:${Number(process.env.CHALK_PORT) || 7911}/assets/export-source.png`)
       const html = `<div id="result" style="width:200px;height:100px;background:rgb(0,0,255)"></div><script>Promise.all(${JSON.stringify(urls)}.map(url=>new Promise(resolve=>{const image=new Image();image.onload=()=>resolve(false);image.onerror=()=>resolve(true);image.src=url}))).then(blocked=>document.getElementById('result').style.background=blocked.every(Boolean)?'rgb(0,200,0)':'rgb(255,0,0)')</script>`
       const frame = json(await call(client, 'create_frame', { name: 'Loopback export', width: 200, height: 100, html })).created
       try {
@@ -267,7 +267,7 @@ export async function checkExports({ app, win, client, call, json, check, projec
         writeFileSync(folder, 'not a folder')
         assert.equal((await client.callTool({ name: 'export_frame', arguments: { id: fixture.id, format: 'html' } })).isError, true)
       } finally { unlinkSync(folder); renameSync(backup, folder) }
-      assert.equal((await fetch(`http://127.0.0.1:7911/export/${fixture.id}.png`)).status, 404)
+      assert.equal((await fetch(`http://127.0.0.1:${Number(process.env.CHALK_PORT) || 7911}/export/${fixture.id}.png`)).status, 404)
     })
 
     await check('untrusted image asset traversal and symbolic links fail at the export boundary', async () => {

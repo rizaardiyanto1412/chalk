@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { AgentEvent, AgentStatus, BrowserPick, Frame } from '../../shared/model'
+import type { AgentEvent, AgentStatus, BrowserPick, Frame, SelectedElement } from '../../shared/model'
 import { api } from './api'
 import { Icon } from './icons'
 import { Markdown } from './Markdown'
@@ -35,6 +35,7 @@ interface Props {
   models: readonly { id: string; label: string }[]
   claudePath: string | null
   selectedFrames: Frame[]
+  selectedElement: SelectedElement | null
   pick: BrowserPick | null
   onClearSelection: () => void
   onNewChat: () => void
@@ -49,7 +50,7 @@ const SUGGESTIONS = [
   'Recipe detail page for a cooking magazine'
 ]
 
-export function Chat({ events, status, models, claudePath, selectedFrames, pick, onClearSelection, onNewChat }: Props) {
+export function Chat({ events, status, models, claudePath, selectedFrames, selectedElement, pick, onClearSelection, onNewChat }: Props) {
   const [text, setText] = useState('')
   const [model, setModel] = useState(() => localStorage.getItem('chalk.model') ?? '')
   const list = useRef<HTMLDivElement>(null)
@@ -110,6 +111,9 @@ export function Chat({ events, status, models, claudePath, selectedFrames, pick,
             {selectedFrames.map((f) => (
               <span key={f.id} className="chip"><Icon name={f.kind === 'image' ? 'image' : 'frame'} size={12} /> {f.name}</span>
             ))}
+            {selectedElement && <span className="chip is-pick element-chip" title={`body/${selectedElement.path.join('/')}`}>
+              <Icon name="pointer" size={12} /> &lt;{selectedElement.tag}&gt; {selectedElement.text.slice(0, 28)}
+            </span>}
             {pick && (
               <span className="chip is-pick" title={pick.selector}>
                 <Icon name="pointer" size={12} /> &lt;{pick.tag}&gt; {pick.text.slice(0, 28) || pick.selector}

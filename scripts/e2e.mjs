@@ -14,6 +14,7 @@ import { checkFrames } from './frames-e2e.mjs'
 import { checkBrowserDevices, checkBrowserDevicePreference } from './browser-devices-e2e.mjs'
 import { checkStyles } from './styles-e2e.mjs'
 import { checkArrangement } from './arrangement-e2e.mjs'
+import { checkElements } from './elements-e2e.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const artifacts = process.env.CHALK_E2E_ARTIFACTS || join(root, 'e2e-artifacts')
@@ -22,7 +23,7 @@ const project = realpathSync(mkdtempSync(join(tmpdir(), 'chalk-e2e-')))
 const profile = realpathSync(mkdtempSync(join(tmpdir(), 'chalk-e2e-profile-')))
 const fakeLog = join(artifacts, 'fake-claude.jsonl')
 writeFileSync(fakeLog, '')
-const PORT = 7911
+const PORT = Number(process.env.CHALK_PORT) || 7911
 const results = []
 const check = async (name, fn) => {
   const t = Date.now()
@@ -515,6 +516,7 @@ await check('Undo restores a deleted frame and Redo deletes it again', async () 
 const framesClient = await mcp()
 await checkFrames({ app, win, client: framesClient, call, json, check, project, artifacts })
 await checkArrangement({ app, win, client: framesClient, call, json, check, project, artifacts })
+await checkElements({ app, win, client: framesClient, call, json, check, project, artifacts, fakeLog })
 await checkBrowserDevices({ app, win, client: framesClient, call, json, check, artifacts })
 await framesClient.close()
 await app.close()

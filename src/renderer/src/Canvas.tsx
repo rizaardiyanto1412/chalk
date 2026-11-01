@@ -1,9 +1,10 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import { EXPORT_FORMATS, type Doc, type Frame, type FrameId, type HtmlFrame } from '../../shared/model'
+import { EXPORT_FORMATS, type Doc, type Frame, type FrameId, type HtmlFrame, type SelectedElement } from '../../shared/model'
 import { frameSize, translated } from '../../shared/frameGeometry'
 import { api } from './api'
 import { nativeEditing, selectedText } from './editFocus'
 import { Icon } from './icons'
+import { useCanvasElements } from './useCanvasElements'
 
 interface Camera {
   x: number
@@ -14,7 +15,7 @@ interface Camera {
 type Gesture =
   | { kind: 'idle' }
   | { kind: 'pan'; sx: number; sy: number; cam: Camera }
-  | { kind: 'move'; frames: Frame[]; id: FrameId; sx: number; sy: number; dx: number; dy: number; moved: boolean; collapse: boolean }
+  | { kind: 'move'; frames: Frame[]; id: FrameId; sx: number; sy: number; dx: number; dy: number; moved: boolean; collapse: boolean; pick: { x: number; y: number } | null }
   | { kind: 'nudge'; frames: Frame[]; dx: number; dy: number; keys: Set<string> }
   | { kind: 'resize'; id: FrameId; sx: number; sy: number; w: number; h: number }
 
@@ -33,6 +34,7 @@ interface Props {
   port: number
   projectEpoch: number
   selection: FrameId[]
+  selectedElement: SelectedElement | null
   onSelect: (ids: FrameId[]) => void
   onZoom: (zoom: number) => void
   tool: CanvasTool
@@ -43,7 +45,7 @@ const MIN_ZOOM = 0.05
 const MAX_ZOOM = 4
 const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
 
-export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, port, projectEpoch, selection, onSelect, onZoom, tool, exportBusy }, ref) {
+export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, port, projectEpoch, selection, selectedElement, onSelect, onZoom, tool, exportBusy }, ref) {
   const host = useRef<HTMLDivElement>(null)
   const [cam, setCam] = useState<Camera>({ x: 80, y: 80, zoom: 0.5 })
   const gesture = useRef<Gesture>({ kind: 'idle' })
@@ -59,6 +61,17 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
   }, [])
   const [space, setSpace] = useState(false)
   const [live, setLive] = useState<FrameId | null>(null)
+  const [cmd, setCmd] = useState(false)
+  const elements = useCanvasElements(doc, selectedElement, projectEpoch)
+  const elementRef = useRef(selectedElement)
+  elementRef.current = selectedElement
+  const pointer = useRef<{ frameId: FrameId; x: number; y: number } | null>(null)
+  const hoverAtPointer = (enabled: boolean) => {
+    const point = pointer.current
+    const frame = point && doc.frames.find((f) => f.id === point.frameId)
+    if (enabled && point && frame?.kind === 'html' && live !== frame.id && !space && tool === 'select') elements.request(frame, 'hover', point)
+    else elements.clearHover()
+  }
 
   useEffect(() => {
     const g = gesture.current
@@ -68,7 +81,7 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
   }, [doc, selection, live, cancelGesture])
 
   useEffect(() => {
-    const blur = () => { cancelGesture(); setSpace(false) }
+    const blur = () => { cancelGesture(); setSpace(false); setCmd(false); elements.clearHover() }
     const focus = () => { if (nativeEditing()) cancelGesture() }
     window.addEventListener('blur', blur)
     window.addEventListener('focusin', focus)
@@ -149,7 +162,9 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      if (e.key === 'Meta') { setCmd(true); hoverAtPointer(true) }
       if (nativeEditing() || selectedText()) return
+      const picked = elementRef.current
       if (e.key.startsWith('Arrow') && !e.metaKey && !e.ctrlKey && !e.altKey && selection.length) {
         if (gesture.current.kind !== 'idle' && gesture.current.kind !== 'nudge') return
         if (gesture.current.kind === 'idle' && e.repeat) return
@@ -166,11 +181,17 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
       else if (e.key === 'Backspace' || e.key === 'Delete') {
         cancelGesture()
         e.preventDefault()
-        void api.frameCommand({ type: 'delete' })
+        if (picked) void api.deleteElement(projectEpoch)
+        else void api.frameCommand({ type: 'delete' })
       } else if (e.key === 'Escape') {
         cancelGesture()
         setLive(null)
-        onSelect([])
+        elements.clearHover()
+        if (picked) {
+          const frame = doc.frames.find((f) => f.id === picked.frameId)
+          if (frame?.kind === 'html' && picked.path.length > 1) elements.request(frame, 'select', { path: picked.path.slice(0, -1) })
+          else if (frame?.kind === 'html') void api.selectElement(frame, projectEpoch, null)
+        } else onSelect([])
       } else if ((e.metaKey && e.key === '0') || (e.shiftKey && e.key === '!')) {
         e.preventDefault()
         fit()
@@ -186,6 +207,7 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
       }
     }
     const up = (e: KeyboardEvent) => {
+      if (e.key === 'Meta') { setCmd(false); hoverAtPointer(!!pointer.current && selection.includes(pointer.current.frameId)) }
       if (e.code === 'Space') setSpace(false)
       const g = gesture.current
       if (g.kind !== 'nudge' || !g.keys.delete(e.key) || g.keys.size) return
@@ -198,7 +220,7 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
       window.removeEventListener('keydown', down)
       window.removeEventListener('keyup', up)
     }
-  }, [selection, onSelect, fit, fitRect, doc.frames, zoomBy, projectEpoch, cancelGesture])
+  }, [selection, onSelect, fit, fitRect, doc.frames, zoomBy, projectEpoch, cancelGesture, selectedElement, elements.request, elements.clearHover, space, tool, live])
 
   useEffect(() => api.on.edit((command) => {
     cancelGesture()
@@ -250,14 +272,27 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
       onSelect(selection.filter((selected) => selected !== id))
       return
     }
-    const ids = e.shiftKey ? [...selection, id] : selection.includes(id) ? selection : [id]
-    onSelect(ids)
-    gesture.current = { kind: 'move', id, frames: doc.frames.filter((f) => ids.includes(f.id)), sx: e.clientX, sy: e.clientY, dx: 0, dy: 0, moved: false, collapse: !e.shiftKey }
+    const ids = e.metaKey && !target.closest('[data-label]') ? [id] : e.shiftKey ? [...selection, id] : selection.includes(id) ? selection : [id]
+    if (ids.length !== selection.length || ids.some((id, i) => id !== selection[i])) onSelect(ids)
+    const box = frameEl.getBoundingClientRect()
+    const pick = f.kind === 'html' && !e.shiftKey && !target.closest('[data-label]') && (e.metaKey || selection.length === 1 && selection[0] === id)
+      ? { x: (e.clientX - box.left) / cam.zoom, y: (e.clientY - box.top) / cam.zoom } : null
+    elements.clearHover()
+    gesture.current = { kind: 'move', id, frames: doc.frames.filter((f) => ids.includes(f.id)), sx: e.clientX, sy: e.clientY, dx: 0, dy: 0, moved: false, collapse: !e.shiftKey, pick }
     setPointerMode('move')
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
     const g = gesture.current
+    if (g.kind === 'idle') {
+      const frameEl = (e.target as HTMLElement).closest<HTMLElement>('[data-frame-id]')
+      const frame = doc.frames.find((f) => f.id === frameEl?.dataset.frameId)
+      if (frameEl && frame && !(e.target as HTMLElement).closest('[data-label], [data-handle]')) {
+        const box = frameEl.getBoundingClientRect()
+        pointer.current = { frameId: frame.id, x: (e.clientX - box.left) / cam.zoom, y: (e.clientY - box.top) / cam.zoom }
+        hoverAtPointer(selection.includes(frame.id) || e.metaKey || cmd)
+      } else { pointer.current = null; elements.clearHover() }
+    }
     if (g.kind === 'pan') setCam({ ...g.cam, x: g.cam.x + e.clientX - g.sx, y: g.cam.y + e.clientY - g.sy })
     else if (g.kind === 'move') {
       const dx = (e.clientX - g.sx) / cam.zoom
@@ -276,7 +311,10 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
     const g = gesture.current
     if (g.kind === 'move') {
       if (g.moved) void api.frameCommand({ type: 'arrange', ids: g.frames.map((f) => f.id), projectEpoch, operation: { kind: 'translate', dx: g.dx, dy: g.dy } })
-      else if (g.collapse) onSelect([g.id])
+      else if (g.pick) {
+        const frame = doc.frames.find((f) => f.id === g.id)
+        if (frame?.kind === 'html') elements.request(frame, 'select', g.pick)
+      } else if (g.collapse) onSelect([g.id])
     } else if (g.kind === 'resize') {
       const patch = draftRef.current[g.id]
       if (patch && doc.frames.some((f) => f.id === g.id)) void api.op({ type: 'patch', id: g.id, patch })
@@ -309,12 +347,13 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
       }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
+      onPointerLeave={() => { pointer.current = null; elements.clearHover() }}
       onPointerUp={onPointerUp}
       onPointerCancel={cancelGesture}
       onLostPointerCapture={() => { if (gesture.current.kind !== 'nudge') cancelGesture() }}
       onDoubleClick={(e) => {
         const id = (e.target as HTMLElement).closest<HTMLElement>('[data-frame-id]')?.dataset.frameId as FrameId | undefined
-        if (id && doc.frames.find((f) => f.id === id)?.kind === 'html') setLive(id)
+        if (id && doc.frames.find((f) => f.id === id)?.kind === 'html') { setLive(id); onSelect([id]); elements.clearHover() }
       }}
       style={{ '--zoom': cam.zoom } as React.CSSProperties}
     >
@@ -330,7 +369,7 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
                 <span className="frame-size">{box.width} × {box.height}</span>
               </div>
               {f.kind === 'html' ? (
-                <FrameView frame={f} port={port} />
+                <FrameView frame={f} port={port} register={elements.register} onReady={elements.resolve} />
               ) : (
                 <img src={`http://127.0.0.1:${port}/assets/${f.asset}`} alt={f.name} draggable={false} />
               )}
@@ -340,6 +379,19 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
           )
         })}
       </div>
+
+      {[{ kind: 'hover', hit: elements.hovered }, { kind: 'selected', hit: selectedElement }].map(({ kind, hit }) => {
+        const frame = hit && doc.frames.find((f) => f.id === hit.frameId)
+        if (!hit || !frame || live === frame.id || kind === 'hover' && (space || tool === 'hand' || pointerGesture)) return null
+        const box = { ...frame, ...draft[frame.id] }
+        const { rect } = hit
+        return <div key={kind} className={`element-outline is-${kind}`} data-element-path={hit.path.join('/')} style={{ left: cam.x + (box.x + rect.x) * cam.zoom, top: cam.y + (box.y + rect.y) * cam.zoom, width: rect.width * cam.zoom, height: rect.height * cam.zoom }}>
+          {kind === 'selected' && <>
+            {['tl', 'tr', 'bl', 'br'].map((corner) => <span key={corner} className={`element-handle ${corner}`} />)}
+            <span className="element-size">{Math.round(rect.width)} × {Math.round(rect.height)}</span>
+          </>}
+        </div>
+      })}
 
       {selected.length === 1 && !draft[selected[0].id] && (
         <FrameToolbar key={selected[0].id} frame={selected[0]} cam={cam} live={live === selected[0].id} busy={exportBusy} onLive={(on) => setLive(on ? selected[0].id : null)} onDelete={() => onSelect([])} />
@@ -421,22 +473,24 @@ function FrameToolbar({ frame, cam, live, busy, onLive, onDelete }: { frame: Fra
 }
 
 /** Keep the last loaded render on screen until the new one has loaded and styled, so edits never flash white. */
-function FrameView({ frame, port }: { frame: HtmlFrame; port: number }) {
-  const revision = useRef({ frame, port, src: `http://127.0.0.1:${port}/frame/${frame.id}?v=${frame.updatedAt}` })
+function FrameView({ frame, port, register, onReady }: { frame: HtmlFrame; port: number; register: (id: FrameId, node: HTMLIFrameElement | null) => void; onReady: () => void }) {
+  const revision = useRef({ frame, port, src: `http://127.0.0.1:${port}/frame/${frame.id}?canvas=1&v=${frame.updatedAt}` })
   const previous = revision.current
   if (previous.port !== port || previous.frame.id !== frame.id || previous.frame.html !== frame.html || previous.frame.name !== frame.name) {
-    revision.current = { frame, port, src: `http://127.0.0.1:${port}/frame/${frame.id}?v=${frame.updatedAt}` }
+    revision.current = { frame, port, src: `http://127.0.0.1:${port}/frame/${frame.id}?canvas=1&v=${frame.updatedAt}` }
   }
   const src = revision.current.src
   const title = frame.name
   const [shown, setShown] = useState(src)
   const [pending, setPending] = useState<string | null>(null)
+  const bind = useCallback((node: HTMLIFrameElement | null) => register(frame.id, node), [register, frame.id])
+  useEffect(() => { if (shown === src) onReady() }, [shown, src, onReady])
   useEffect(() => {
     if (src !== shown) setPending(src)
   }, [src, shown])
   return (
     <>
-      <iframe key={shown} title={title} src={shown} scrolling="no" sandbox="allow-scripts" />
+      <iframe ref={shown === src ? bind : undefined} onLoad={onReady} key={shown} title={title} src={shown} scrolling="no" sandbox="allow-scripts" />
       {pending && (
         <iframe
           key={pending}

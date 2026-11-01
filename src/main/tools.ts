@@ -107,7 +107,7 @@ export const TOOLS: Tool[] = [
   }),
   tool({
     name: 'get_canvas',
-    description: 'List every frame on the Chalk canvas (id, name, kind, position, size), plus what the user has selected: selected frame ids and the element they picked in the built-in browser.',
+    description: 'List every frame on the Chalk canvas (id, name, kind, position, size), plus what the user has selected: selected frame ids, the selected canvas element, and the element picked in the built-in browser.',
     input: {},
     readOnly: true,
     run: async (_a, ctx) => [
@@ -115,6 +115,7 @@ export const TOOLS: Tool[] = [
         project: ctx.store.dir,
         frames: ctx.store.doc.frames.map(frameSummary),
         selectedFrameIds: ctx.store.selection,
+        selectedElement: ctx.store.selectedElement,
         browserPick: ctx.store.browserPick
       })
     ]

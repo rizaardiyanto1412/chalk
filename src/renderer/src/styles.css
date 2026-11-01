@@ -256,3 +256,14 @@ body.is-resizing iframe { pointer-events: none; }
 .browser-device-bar select { max-width: 130px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--text); font: inherit; padding: 2px 5px; }
 .browser-device-bar select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .browser-slot.is-fixed { background: #e4e4e7; }
+
+.element-outline { position: absolute; pointer-events: none; border: 1px solid var(--accent); z-index: 5; }
+.element-outline.is-selected { border-width: 2px; }
+.element-handle { position: absolute; width: 7px; height: 7px; background: #fff; border: 1px solid var(--accent); }
+.element-handle.tl { left: -4px; top: -4px; }
+.element-handle.tr { right: -4px; top: -4px; }
+.element-handle.bl { left: -4px; bottom: -4px; }
+.element-handle.br { right: -4px; bottom: -4px; }
+.element-size { position: absolute; left: 50%; top: calc(100% + 8px); transform: translateX(-50%); padding: 3px 6px; border-radius: 3px; background: var(--accent); color: white; font-size: 11px; line-height: 15px; white-space: nowrap; }
+.element-inspector { display: flex; flex-direction: column; gap: 5px; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+.element-inspector span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
