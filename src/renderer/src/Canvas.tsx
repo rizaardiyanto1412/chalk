@@ -6,6 +6,8 @@ import { api } from './api'
 import { nativeEditing, selectedText } from './editFocus'
 import { Icon } from './icons'
 import { useCanvasElements } from './useCanvasElements'
+import type { PresenceVisual } from '../../shared/presence'
+import { CanvasPresence } from './CanvasPresence'
 
 interface Camera {
   x: number
@@ -41,6 +43,7 @@ interface Props {
   onZoom: (zoom: number) => void
   tool: CanvasTool
   exportBusy: boolean
+  presence: PresenceVisual
 }
 
 type MarqueePreview =
@@ -62,7 +65,7 @@ const MIN_ZOOM = 0.05
 const MAX_ZOOM = 4
 const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
 
-export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, port, projectEpoch, selection, selectedElements, onSelect, onZoom, tool, exportBusy }, ref) {
+export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, port, projectEpoch, selection, selectedElements, onSelect, onZoom, tool, exportBusy, presence }, ref) {
   const host = useRef<HTMLDivElement>(null)
   const [cam, setCam] = useState<Camera>({ x: 80, y: 80, zoom: 0.5 })
   const elements = useCanvasElements(doc, selectedElements, projectEpoch)
@@ -404,6 +407,14 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
       ref={host}
       tabIndex={-1}
       className={`canvas ${space || tool === 'hand' ? 'is-space' : ''} ${panning ? 'is-panning' : ''} ${pointerGesture ? 'is-gesturing' : ''}`}
+      onLoadCapture={(e) => {
+        const frameId = (e.target as HTMLElement).closest<HTMLElement>('[data-frame-id]')?.dataset.frameId
+        if (presence.phase === 'idle' || presence.target.kind !== 'frame' || presence.target.frameId !== frameId) return
+        for (const animation of e.currentTarget.querySelector('.canvas-presence .presence-band')?.getAnimations() ?? []) {
+          animation.currentTime = 0
+          animation.play()
+        }
+      }}
       onDragOver={(e) => {
         if ([...e.dataTransfer.items].some((i) => i.type.startsWith('image/'))) e.preventDefault()
       }}
@@ -452,6 +463,8 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas({ doc, por
           )
         })}
       </div>
+
+      <CanvasPresence visual={presence} frames={doc.frames.map((frame) => ({ ...frame, ...draft[frame.id] }))} cam={cam} />
 
       {outlineHits.map(({ kind, hit }) => {
         const frame = hit && doc.frames.find((f) => f.id === hit.frameId)

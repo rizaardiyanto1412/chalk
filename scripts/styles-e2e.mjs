@@ -235,8 +235,8 @@ export async function checkStyles({ app, win, client, call, json, check, artifac
       await win.locator('.chat textarea').fill(text)
       await win.locator('.chat textarea').press('Enter')
     }
-    await win.waitForFunction(() => document.querySelector('.chat .thinking'), null, { timeout: 10000 })
-    await win.waitForFunction(() => !document.querySelector('.chat .thinking'), null, { timeout: 15000 })
+    await win.waitForFunction(() => document.querySelector('.chat .agent-presence'), null, { timeout: 10000 })
+    await win.waitForFunction(() => !document.querySelector('.chat .agent-presence'), null, { timeout: 15000 })
     assert.equal(promptCount(), count + 1, JSON.stringify(logs()))
     const content = logs().filter(l => l.type === 'user').at(-1).message.content
     return typeof content === 'string' ? content : content.filter(block => block.type === 'text').map(block => block.text).join('\n')

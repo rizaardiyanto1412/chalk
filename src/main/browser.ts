@@ -2,6 +2,9 @@ import { EventEmitter } from 'node:events'
 import { randomUUID } from 'node:crypto'
 import { WebContentsView, type BaseWindow, type Rectangle } from 'electron'
 import { BROWSER_DEVICES, type BrowserDeviceId, type BrowserPick, type BrowserState } from '../shared/model'
+import type { BrowserPresenceAction, PresenceTarget, PresenceVisual } from '../shared/presence'
+import { PRESENCE_CSS, PRESENCE_CURSOR_PATH } from '../shared/presenceVisual'
+import { createBrowserPresence } from './browserPresence'
 
 const SNAPSHOT_JS = `(() => {
   const MAX = 450
@@ -18,7 +21,7 @@ const SNAPSHOT_JS = `(() => {
   const INTERACTIVE = 'a[href],button,input,select,textarea,summary,[role=button],[role=link],[role=tab],[role=menuitem],[role=option],[role=checkbox],[role=switch],[onclick]'
   const LANDMARK = { HEADER: 'header', NAV: 'nav', MAIN: 'main', ASIDE: 'aside', FOOTER: 'footer', FORM: 'form', DIALOG: 'dialog' }
   const walk = (el, depth) => {
-    if (lines.length >= MAX || !(el instanceof Element)) return
+    if (lines.length >= MAX || !(el instanceof Element) || el.hasAttribute('data-chalk-presence')) return
     const tag = el.tagName
     let d = depth
     const role = el.getAttribute('role')
@@ -46,6 +49,7 @@ const STYLES_JS = `(() => {
   const colors = new Map(), bgs = new Map(), fonts = new Map(), sizes = new Map(), radii = new Map()
   const els = [...document.querySelectorAll('body *')].slice(0, 4000)
   for (const el of els) {
+    if (el.hasAttribute('data-chalk-presence')) continue
     const r = el.getBoundingClientRect()
     if (r.width < 1 || r.height < 1) continue
     const s = getComputedStyle(el)
@@ -109,6 +113,9 @@ export class Browser extends EventEmitter {
   private device: BrowserDeviceId
   private slot: Rectangle = { x: 0, y: 0, width: 0, height: 0 }
   private operations: Promise<unknown> = Promise.resolve()
+  private overlayObject: string | null = null
+  private navigation = 0
+  private presence: PresenceVisual = { phase: 'idle' }
 
   constructor(device: BrowserDeviceId = 'responsive') {
     super()
@@ -120,12 +127,20 @@ export class Browser extends EventEmitter {
     for (const ev of ['did-start-loading', 'did-stop-loading', 'did-navigate', 'did-navigate-in-page', 'page-title-updated'] as const) {
       wc.on(ev as 'did-stop-loading', () => {
         if (ev === 'did-navigate') {
+          this.overlayObject = null
           this.picking = false
           void this.serialize(() => this.applyDevice()).catch((error) => console.error('Browser viewport navigation failed', error))
         }
         this.emit('state', this.state())
       })
     }
+    wc.on('did-start-navigation', (_event, _url, inPlace, isMainFrame) => {
+      if (!inPlace && isMainFrame) {
+        this.navigation++
+        this.overlayObject = null
+      }
+    })
+    wc.on('did-stop-loading', () => { void this.present(this.presence).catch((error) => console.error('Browser presence failed', error)) })
     wc.setWindowOpenHandler(({ url }) => {
       void this.navigate(url).catch((error) => console.error('Browser popup navigation failed', error))
       return { action: 'deny' }
@@ -150,6 +165,52 @@ export class Browser extends EventEmitter {
     const result = this.operations.then(operation)
     this.operations = result.catch(() => {})
     return result
+  }
+
+  present(visual: PresenceVisual): Promise<void> {
+    this.presence = visual
+    const navigation = this.navigation
+    return this.serialize(async () => {
+      const current = this.presence
+      const wc = this.view.webContents
+      if (wc.isDestroyed() || !wc.getURL() || wc.isLoadingMainFrame()) return
+      if (!this.overlayObject && (current.phase === 'idle' || current.target.kind !== 'browser')) return
+      const dbg = wc.debugger
+      if (!dbg.isAttached()) dbg.attach('1.3')
+      if (!this.overlayObject) {
+        const { frameTree } = await dbg.sendCommand('Page.getFrameTree')
+        const { executionContextId } = await dbg.sendCommand('Page.createIsolatedWorld', { frameId: frameTree.frame.id, worldName: 'Chalk presence' })
+        const { result, exceptionDetails } = await dbg.sendCommand('Runtime.evaluate', { expression: `(${createBrowserPresence.toString()})(${JSON.stringify(PRESENCE_CSS)}, ${JSON.stringify(PRESENCE_CURSOR_PATH)})`, contextId: executionContextId })
+        if (exceptionDetails || !result.objectId) throw new Error('Could not create browser presence')
+        this.overlayObject = result.objectId
+      }
+      await this.overlayCall('update', current)
+    }).catch((error) => {
+      if (navigation === this.navigation && !this.view.webContents.isDestroyed()) throw error
+    })
+  }
+
+  presenceReady(): Promise<unknown> {
+    return this.operations
+  }
+
+  private async overlayCall(method: 'update' | 'hide', value: PresenceVisual | boolean): Promise<void> {
+    if (!this.overlayObject) return
+    const { exceptionDetails } = await this.view.webContents.debugger.sendCommand('Runtime.callFunctionOn', {
+      objectId: this.overlayObject,
+      functionDeclaration: `function(value) { return this.${method}(value) }`,
+      arguments: [{ value }], awaitPromise: true, returnByValue: true
+    })
+    if (exceptionDetails) throw new Error('Browser presence update failed')
+  }
+
+  async presenceTarget(action: BrowserPresenceAction, ref?: string): Promise<PresenceTarget> {
+    if ((action === 'click' || action === 'type') && ref) {
+      const point = await this.withRef<{ x: number; y: number }>(ref, (el) => `${el}.scrollIntoView({ block: 'center', inline: 'nearest' }); const r = ${el}.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }`)
+      return { kind: 'browser', action, point }
+    }
+    const point = action === 'scroll' ? await this.view.webContents.executeJavaScript('({ x: innerWidth / 2, y: innerHeight / 2 })') : null
+    return { kind: 'browser', action, point }
   }
 
   private fitBounds(): number {
@@ -295,6 +356,7 @@ export class Browser extends EventEmitter {
         const wc = this.view.webContents
         const dbg = wc.debugger
         await this.applyDevice()
+        await this.overlayCall('hide', true)
         let clip: { x: number; y: number; width: number; height: number } | undefined
         if (opts.ref) {
           clip = await this.withRef(opts.ref, (el) => `const r = ${el}.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, width: r.width, height: r.height }`)
@@ -310,6 +372,7 @@ export class Browser extends EventEmitter {
         const png = Buffer.from(res.data, 'base64')
         return { png, width: png.readUInt32BE(16), height: png.readUInt32BE(20) }
       } finally {
+        await this.overlayCall('hide', false)
         await this.applyDevice()
       }
     })

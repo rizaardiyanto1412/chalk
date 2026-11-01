@@ -135,6 +135,8 @@ export interface Selection {
 }
 
 export type AgentEvent =
+  | { type: 'start'; model: string | null }
+  | { type: 'model'; model: string }
   | { type: 'user'; text: string }
   | { type: 'text'; text: string }
   | { type: 'tool'; name: string; summary: string }

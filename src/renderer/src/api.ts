@@ -1,4 +1,5 @@
 import type { StyleChoice, StyleSummary } from '../../shared/styles'
+import type { PresenceState } from '../../shared/presence'
 import type { ElementHit, ElementSelectionMode } from '../../shared/elementSelection'
 import type { ChalkApi } from '../../preload'
 import type { AgentEvent, AgentStatus, BrowserPick, BrowserState, CopyImageResult, Doc, ExportActivity, ExportFormat, ExportResult, EditCommand, FrameCommand, NativeEditCommand, FrameId, Op, SelectedElement } from '../../shared/model'
@@ -24,6 +25,7 @@ export interface InitState {
   recentUrls: string[]
   tabs: ProjectTab[]
   agentStatus: AgentStatus
+  presence: PresenceState
 }
 
 export interface ProjectTab {
@@ -68,6 +70,7 @@ export const api = {
     browserPick: (fn: (p: BrowserPick | null) => void) => e().on('browser:pick', fn),
     agentEvent: (fn: (ev: AgentEvent) => void) => e().on('agent:event', fn),
     agentStatus: (fn: (s: AgentStatus) => void) => e().on('agent:status', fn),
+    presence: (fn: (state: PresenceState) => void) => e().on('presence', fn),
     focus: (fn: (t: FocusTarget) => void) => e().on('focus', fn),
     history: (fn: (direction: 'undo' | 'redo') => void) => e().on('history', fn),
     settingsOpen: (fn: () => void) => e().on('settings:open', fn),

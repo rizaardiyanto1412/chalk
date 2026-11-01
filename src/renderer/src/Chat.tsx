@@ -3,6 +3,7 @@ import type { AgentEvent, AgentStatus, BrowserPick, Frame, SelectedElement } fro
 import { api } from './api'
 import { Icon } from './icons'
 import { Markdown } from './Markdown'
+import { elapsedPresence, type PresenceState } from '../../shared/presence'
 
 const TOOL_LABELS: Record<string, string> = {
   get_canvas: 'Read canvas',
@@ -32,6 +33,7 @@ const TOOL_LABELS: Record<string, string> = {
 interface Props {
   events: AgentEvent[]
   status: AgentStatus
+  presence: PresenceState
   models: readonly { id: string; label: string }[]
   claudePath: string | null
   selectedFrames: Frame[]
@@ -50,7 +52,7 @@ const SUGGESTIONS = [
   'Recipe detail page for a cooking magazine'
 ]
 
-export function Chat({ events, status, models, claudePath, selectedFrames, selectedElements, pick, onClearSelection, onNewChat }: Props) {
+export function Chat({ events, status, presence, models, claudePath, selectedFrames, selectedElements, pick, onClearSelection, onNewChat }: Props) {
   const [text, setText] = useState('')
   const [model, setModel] = useState(() => localStorage.getItem('chalk.model') ?? '')
   const list = useRef<HTMLDivElement>(null)
@@ -98,7 +100,7 @@ export function Chat({ events, status, models, claudePath, selectedFrames, selec
           </div>
         )}
         {events.map((e, i) => <Message key={i} ev={e} />)}
-        {running && <div className="thinking"><span /><span /><span /></div>}
+        <AgentPresence presence={presence} models={models} />
       </div>
 
       {!claudePath && (
@@ -161,8 +163,32 @@ export function Chat({ events, status, models, claudePath, selectedFrames, selec
   )
 }
 
+function AgentPresence({ presence, models }: Pick<Props, 'presence' | 'models'>) {
+  const active = presence.turn ?? (presence.visual.phase === 'active' && presence.visual.operation === 'running' ? { ...presence.visual, model: null } : null)
+  const since = active?.since
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    if (since === undefined) return
+    setNow(Date.now())
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [since])
+  if (!active) return null
+  const model = models.find((entry) => entry.id === active.model)?.label ?? active.model
+  return <div className="agent-presence" role="status">
+    <span className="presence-dot" />
+    <strong>Chalk</strong>
+    {model && <span className="presence-model" title={model}>{model}</span>}
+    <span className="presence-activity">{active.activity}</span>
+    <span className="presence-elapsed" aria-label="Elapsed time">{elapsedPresence(active.since, now)}</span>
+  </div>
+}
+
 function Message({ ev }: { ev: AgentEvent }) {
   switch (ev.type) {
+    case 'start':
+    case 'model':
+      return null
     case 'user':
       return <div className="msg-user">{ev.text}</div>
     case 'text':

@@ -87,6 +87,7 @@ export class Agent extends EventEmitter {
       this.emitEvent({ type: 'error', text: 'Claude Code was not found. Install it from https://claude.com/claude-code and sign in with `claude`.' })
       return
     }
+    this.emitEvent({ type: 'start', model: model || null })
     this.setStatus('running')
     this.abort = new AbortController()
     try {
@@ -109,7 +110,10 @@ export class Agent extends EventEmitter {
         }
       })
       for await (const m of stream) {
-        if (m.type === 'system' && m.subtype === 'init') this.sessionId = m.session_id
+        if (m.type === 'system' && m.subtype === 'init') {
+          this.sessionId = m.session_id
+          this.emitEvent({ type: 'model', model: m.model })
+        }
         else if (m.type === 'assistant' && !m.parent_tool_use_id) {
           for (const block of m.message.content) {
             if (block.type === 'text' && block.text.trim()) this.emitEvent({ type: 'text', text: block.text })

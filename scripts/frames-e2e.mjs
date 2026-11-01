@@ -269,7 +269,7 @@ export async function checkFrames({ app, win, client, call, json, check, project
     })
     await check('native browser focus keeps Select All, Copy, Paste, and Duplicate away from frames', async () => {
       await select([html.id, image.id])
-      await call(client, 'browser_navigate', { url: 'http://127.0.0.1:7912' })
+      await call(client, 'browser_navigate', { url: `http://127.0.0.1:${(Number(process.env.CHALK_PORT) || 7911) + 1}` })
       await nativeText('browser text')
       await win.waitForSelector('.browser-slot')
       await win.waitForTimeout(200)
