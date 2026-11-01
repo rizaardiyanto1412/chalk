@@ -298,6 +298,8 @@ await check('the browser shows the desktop layout by default, scaled to fit the 
   assert.equal(await win.getByLabel('Browser viewport').inputValue(), 'desktop')
   assert.equal(view.cssWidth, 1440, 'page lays out at desktop width')
   assert.ok(view.bounds.x >= slot.x - 1 && view.bounds.y >= slot.y - 1 && view.bounds.x + view.bounds.width <= slot.x + slot.width + 1 && view.bounds.y + view.bounds.height <= slot.y + slot.height + 1, 'scaled view stays inside the panel')
+  assert.ok(Math.abs(view.bounds.x + view.bounds.width / 2 - (slot.x + slot.width / 2)) <= 1, 'centered horizontally')
+  assert.ok(Math.abs(view.bounds.y + view.bounds.height / 2 - (slot.y + slot.height / 2)) <= 1, 'centered vertically')
 })
 
 await check('the Responsive viewport covers exactly the browser area', async () => {

@@ -222,7 +222,7 @@ export class Browser extends EventEmitter {
     const scale = this.slot.width > 0 && this.slot.height > 0 ? Math.min(1, this.slot.width / viewport.width, this.slot.height / viewport.height) : 1
     const width = Math.min(this.slot.width, Math.floor(viewport.width * scale))
     const height = Math.min(this.slot.height, Math.floor(viewport.height * scale))
-    this.view.setBounds({ x: this.slot.x + Math.floor((this.slot.width - width) / 2), y: this.slot.y, width, height })
+    this.view.setBounds({ x: this.slot.x + Math.floor((this.slot.width - width) / 2), y: this.slot.y + Math.floor((this.slot.height - height) / 2), width, height })
     return scale
   }
 
