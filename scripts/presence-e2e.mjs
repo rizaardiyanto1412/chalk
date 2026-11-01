@@ -146,9 +146,11 @@ export async function checkPresence({ app, win, client, call, json, check, artif
     await check('MCP create_frame shows the canvas cursor and a scaled scan without blocking canvas interaction', async () => {
       const created = json(await call(client, 'create_frame', { name: 'Presence canvas fixture', width: 360, height: 400, x: 0, y: 0, html: '<div style="height:400px;background:#f8fafc;padding:32px"><h1 style="color:#172554">A clear next step.</h1><p style="color:#64748b">Made on the canvas.</p><button style="background:#2563eb;color:white;border:0;padding:12px 20px;border-radius:8px">Get started</button></div>' })).created
       frames.push(created.id)
-      await win.waitForSelector(`.canvas-presence[data-presence-frame="${created.id}"]`)
-      await win.frameLocator(`[data-frame-id="${created.id}"] iframe`).getByRole('heading', { name: 'A clear next step.' }).waitFor()
-      await win.waitForTimeout(260)
+      await win.waitForFunction((id) => {
+        const frame = document.querySelector(`[data-frame-id="${id}"]`)?.getBoundingClientRect()
+        const cursor = document.querySelector('.canvas-presence .presence-cursor')?.getBoundingClientRect()
+        return !!frame && !!cursor && !!document.querySelector('.canvas-presence .presence-scan') && Math.abs(cursor.x - frame.x - 12) < 3 && Math.abs(cursor.y - frame.y + 16) < 3
+      }, created.id, { timeout: 3000 })
       const bounds = await win.evaluate((id) => {
         const frame = document.querySelector(`[data-frame-id="${id}"]`).getBoundingClientRect()
         const scan = document.querySelector('.canvas-presence .presence-scan').getBoundingClientRect()
@@ -162,6 +164,7 @@ export async function checkPresence({ app, win, client, call, json, check, artif
       assert.ok(Math.abs(bounds.cursor.y - bounds.frame.y + 16) < 3)
       assert.equal(bounds.pointerEvents, 'none')
       assert.equal(bounds.animation, 'running')
+      await win.frameLocator(`[data-frame-id="${created.id}"] iframe`).getByRole('heading', { name: 'A clear next step.' }).waitFor()
       await win.locator('.canvas').screenshot({ path: join(evidence, 'canvas-cursor-sweep.png') })
       await win.locator(`[data-frame-id="${created.id}"] .frame-label`).click()
       assert.deepEqual(json(await call(client, 'get_canvas')).selectedFrameIds, [created.id])
