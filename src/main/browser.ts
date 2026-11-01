@@ -121,6 +121,7 @@ export class Browser extends EventEmitter {
     super()
     this.device = device
     this.view = new WebContentsView({ webPreferences: { partition: 'persist:chalk-browser', sandbox: true } })
+    this.view.setBackgroundColor('#ffffff')
     this.view.setVisible(false)
     const wc = this.view.webContents
     wc.setUserAgent(wc.getUserAgent().replace(/ (Electron|chalk)\/\S+/g, ''))

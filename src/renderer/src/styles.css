@@ -276,7 +276,7 @@ body.is-resizing iframe { pointer-events: none; }
 .browser-device-bar { height: 32px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 11px; }
 .browser-device-bar select { max-width: 130px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--text); font: inherit; padding: 2px 5px; }
 .browser-device-bar select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.browser-slot.is-fixed { background: #e4e4e7; }
+.browser-slot.is-fixed { background: #fff; }
 
 .element-outline { position: absolute; pointer-events: none; border: 1px solid var(--accent); z-index: 5; }
 .element-outline.is-selected, .element-outline.is-union { border-width: 2px; }
