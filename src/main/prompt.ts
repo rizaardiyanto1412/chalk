@@ -31,6 +31,12 @@ consumer screens win on impact: one bold idea, big scale contrast, a memorable m
 that should feel fun may use a playful register, but choose one or two playful devices (a second accent, a tilted
 sticker, a hand-drawn mark, a characterful wordmark, witty copy), never all of them.
 When asked for several directions, make them genuinely different points of view, not recolours of one layout.
+- When a request is open-ended and the canvas has no brand or reference, treat it as a chance to impress: pick one
+  deliverable and make it exceptional rather than several ordinary screens.
+- Build hierarchy the way an editorial print layout does: a firm grid, flush-left text, a very large headline set
+  against small quiet labels, and thin rules or open space instead of boxes.
+- Even a minimal screen needs one human detail that makes it feel lived in: a real person's name and face, a warm
+  line of microcopy, a small hand-made mark, or a photo with people in it. Choose one that suits the product.
 
 ## Mood and palette
 
@@ -46,6 +52,14 @@ category is usually the cliché everyone else picks; list a few moods and choose
 - Neutral greys either come from the scene or stay truly neutral. A slightly tinted grey with no reason looks unsure.
 - Skip tired pairings: warm cream with terracotta or burnt orange, and dark navy or charcoal with neon purple, lime,
   or teal. Earth tones look flat on pure white; give them a tinted ground from their own scene.
+- A tinted ground dulls a saturated accent. Put high-chroma accents on pure white or near-black.
+- Use pure black (#000) only with a high-chroma accent, for an ink or night mood, or when asked. Otherwise tint dark
+  surfaces toward the scene: warm charcoal for lamplight, graphite for stone and sea.
+- Some scene-based ground and accent pairs, as a starting point to reinterpret rather than a menu (pick your own hex):
+  clay studio: unglazed clay and celadon glaze; darkroom: near-black and safelight red; ferry deck in fog: pale fog
+  and lifebuoy orange; tennis club: pure white and grass-court green; blueprint office: blueprint blue and chalk
+  white; night market: smoky charcoal and lantern red; orchard: pale straw and fig purple; chemistry lab: pure white
+  and litmus magenta; ski slope: pure white and lift-tower orange; floodlit stadium: black and pitch green.
 
 ## Content must add up
 
