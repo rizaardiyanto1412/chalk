@@ -1,6 +1,8 @@
 import { foldRuns, type RunProgress } from '../../shared/run'
 import { RunControls, RunEstimate, savedRunSettings } from './RunControls'
 import { CodebaseButton } from './CodebaseButton'
+import { ModelPicker } from './ModelPicker'
+import { effortSchema, modelName, type Effort, type ModelOption } from '../../shared/models'
 import { RunCard } from './RunCard'
 import { useEffect, useRef, useState } from 'react'
 import type { ChatHistoryState } from '../../shared/chats'
@@ -41,7 +43,7 @@ interface Props {
   history: ChatHistoryState
   status: AgentStatus
   presence: PresenceState
-  models: readonly { id: string; label: string }[]
+  models: readonly ModelOption[]
   claudePath: string | null
   selectedFrames: Frame[]
   selectedElements: SelectedElement[]
@@ -59,13 +61,15 @@ const SUGGESTIONS = [
   'Recipe detail page for a cooking magazine'
 ]
 
-export function Chat({ history, status, presence, models, claudePath, selectedFrames, selectedElements, pick, onClearSelection, onNewChat }: Props) {
+export function Chat({ history, status, presence, models: initialModels, claudePath, selectedFrames, selectedElements, pick, onClearSelection, onNewChat }: Props) {
   const events = history.current.events
   const [menuOpen, setMenuOpen] = useState(false)
   const head = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
   const [text, setText] = useState('')
   const [model, setModel] = useState(() => localStorage.getItem('chalk.model') ?? '')
+  const [effort, setEffort] = useState<Effort | null>(() => effortSchema.safeParse(localStorage.getItem('chalk.effort')).data ?? null)
+  const [models, setModels] = useState(initialModels)
   const list = useRef<HTMLDivElement>(null)
   const box = useRef<HTMLTextAreaElement>(null)
   const running = status === 'running'
@@ -112,7 +116,7 @@ export function Chat({ history, status, presence, models, claudePath, selectedFr
 
   const send = (t: string) => {
     if (!t.trim() || running) return
-    void api.sendAgent(t.trim(), model, null, parallel)
+    void api.sendAgent(t.trim(), model, null, parallel, effort)
     setText('')
   }
 
@@ -230,16 +234,13 @@ export function Chat({ history, status, presence, models, claudePath, selectedFr
           />
           <div className="input-foot">
             <RunControls value={parallel} onChange={setParallel} disabled={running}><CodebaseButton disabled={running} model={model} /></RunControls>
-            <select
-              value={model}
-              onChange={(e) => {
-                setModel(e.target.value)
-                localStorage.setItem('chalk.model', e.target.value)
-              }}
-              title="Claude model"
-            >
-              {models.map((m) => <option key={m.id} value={m.id}>{m.label === 'Default' ? 'Default model' : m.label}</option>)}
-            </select>
+            <ModelPicker models={models} model={model} effort={effort} disabled={running} onOpen={() => void api.models().then(setModels)} onChange={(nextModel, nextEffort) => {
+              setModel(nextModel)
+              setEffort(nextEffort)
+              localStorage.setItem('chalk.model', nextModel)
+              if (nextEffort) localStorage.setItem('chalk.effort', nextEffort)
+              else localStorage.removeItem('chalk.effort')
+            }} />
             {running ? (
               <button className="send is-stop" onClick={() => api.stopAgent()} title={stopping ? 'Stopping…' : 'Stop'} aria-label="Stop"><Icon name="stop" size={12} /></button>
             ) : (
@@ -263,7 +264,7 @@ function AgentPresence({ presence, models, managed, counts }: Pick<Props, 'prese
     return () => clearInterval(timer)
   }, [since])
   if (!active) return null
-  const model = models.find((entry) => entry.id === active.model)?.label ?? active.model
+  const model = active.model === null ? null : modelName(models, active.model)
   return <div className="agent-presence" role={managed ? undefined : 'status'}>
     <span className="presence-dot" />
     <strong>Chalk</strong>

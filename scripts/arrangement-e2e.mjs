@@ -260,8 +260,10 @@ export async function checkArrangement({ app, win, client, call, json, check, pr
       await textarea.fill('native text')
       await textarea.press('ArrowLeft')
       await textarea.press('Shift+ArrowLeft')
-      await win.locator('.chat select[title="Claude model"]').focus()
+      await win.getByRole('button', { name: 'Claude model' }).click()
+      await win.getByLabel('Other model ID').focus()
       await win.keyboard.press('ArrowDown')
+      await win.keyboard.press('Escape')
       await win.evaluate(() => {
         const el = document.createElement('div')
         el.id = 'arrangement-editable'; el.contentEditable = 'true'; el.textContent = 'Native editable'; document.body.append(el); el.focus()

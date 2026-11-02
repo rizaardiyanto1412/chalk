@@ -13,6 +13,7 @@ import { DraftBook, WorkerResources, type Draft, type PageCapture, type Referenc
 import { frozenHtml, referenceAssetNames, workerTools } from './workerTools'
 import { PLANNER_SYSTEM, plannerPrompt, workerPrompt } from './runPrompt'
 import { newId } from './tools'
+import type { Effort } from '../shared/models'
 import type { LiveRunView } from './liveRun'
 
 export interface RunDeps {
@@ -49,7 +50,7 @@ export class Run {
   private hadFailure = false
   get active(): boolean { return this.phase !== 'finished' }
   get stopping(): boolean { return this.phase === 'stopping' }
-  constructor(private readonly deps: RunDeps, private readonly settings: RunSettings, private readonly text: string, private readonly turn: TurnContext, private readonly model: string) {
+  constructor(private readonly deps: RunDeps, private readonly settings: RunSettings, private readonly text: string, private readonly turn: TurnContext, private readonly model: string, private readonly effort?: Effort) {
     this.epoch = deps.store.projectEpoch
     this.dir = deps.store.dir
     const frames = structuredClone(turn.selectedFrames).map(f => Object.freeze(f))
@@ -157,7 +158,7 @@ export class Run {
     let error = 'Structured output is unavailable. The installed Claude CLI must support JSON-schema output.'
     try {
       stream = query({ prompt: plannerPrompt(this.settings, this.text, this.turn, refs, styleSummaries()), options: {
-        pathToClaudeCodeExecutable: claude, cwd: this.dir, model: this.model || undefined,
+        pathToClaudeCodeExecutable: claude, cwd: this.dir, model: this.model || undefined, ...(this.effort ? { effort: this.effort } : {}),
         systemPrompt: PLANNER_SYSTEM, tools: [], mcpServers: {}, strictMcpConfig: true,
         settingSources: [], persistSession: false, permissionMode: 'dontAsk', maxTurns: 3,
         abortController: this.controller, stderr: data => { stderr = (stderr + data).slice(-4000) }, outputFormat: { type: 'json_schema', schema: planJsonSchema(this.settings) }
@@ -207,7 +208,7 @@ export class Run {
     this.live.set(job.id, { token, ctx })
     this.jobNotice(job, 'running')
     let result: Awaited<ReturnType<typeof runWorker>>
-    try { result = await runWorker(ctx, { claude, cwd: this.dir, model: this.model, mcpUrl: `${this.deps.origin()}/mcp/worker`, token, prompt: workerPrompt(job, plan, refs, this.text, this.styleFor(job, refs)), tools: workerTools(ctx).map(t => t.name) }) }
+    try { result = await runWorker(ctx, { claude, cwd: this.dir, model: this.model, effort: this.effort, mcpUrl: `${this.deps.origin()}/mcp/worker`, token, prompt: workerPrompt(job, plan, refs, this.text, this.styleFor(job, refs)), tools: workerTools(ctx).map(t => t.name) }) }
     finally {
       this.deps.registry.revoke(token)
       drafts.seal()

@@ -14,7 +14,8 @@ import { createPreview } from './previews'
 import type { PhotoKeys } from './photos'
 import { measureUrl } from './render'
 import { randomUUID } from 'node:crypto'
-import { MODELS } from './agent'
+import { listModels } from './models'
+import { FALLBACK_MODELS, effortSchema } from '../shared/models'
 import { frameDocument } from './frameHtml'
 import { buildExport, copyFrameImage, exportFileName, exportFormatSchema, snapshotExport, writeExport } from './export'
 import { loadStyle, styleChoiceSchema, styleSummaries } from './styles'
@@ -357,7 +358,7 @@ function registerIpc(): void {
     port,
     mcpUrl: mcpUrl(),
     claudePath: findCli('claude'),
-    models: MODELS,
+    models: FALLBACK_MODELS,
     styles: styleSummaries(),
     browser: browser.state(),
     recentUrls: config.recentUrls,
@@ -452,13 +453,13 @@ function registerIpc(): void {
   handle('agent:send', (_e, raw: unknown) => {
     if (ws.busy || chatDialogOpen) return
     try {
-      const { text, model, style, parallel } = z.object({ text: z.string().trim().min(1), model: z.string(), style: styleChoiceSchema.nullish(), parallel: runSettingsSchema.optional() }).strict().parse(raw)
+      const { text, model, effort, style, parallel } = z.object({ text: z.string().trim().min(1), model: z.string().max(120), effort: effortSchema.nullish(), style: styleChoiceSchema.nullish(), parallel: runSettingsSchema.optional() }).strict().parse(raw)
       const resolved = style ? loadStyle({ name: style.id, variant: style.variant }) : null
       if (style && resolved?.id !== style.id) throw new Error('Style attachments require a canonical style ID from the catalog.')
       const selectedFrames = ws.store.selection.flatMap((id) => findFrame(ws.store.doc, id) ?? [])
       const turn = { codebase: ws.codebase ? { name: ws.codebase.name, hasBrief: hasProductBrief(ws.dir) } : undefined, selectedFrames, selectedElements: ws.store.selectedElements, browserPick: ws.store.browserPick, browserUrl: browser.state().url, style: resolved, priorRuns: priorRunNote(ws.chats.current.events, ws.store.doc.frames) ?? undefined }
       if (!parallel || isOrdinary(parallel)) {
-        void ws.agent.send(text, turn, model)
+        void ws.agent.send(text, turn, model, effort ?? undefined)
         return
       }
       // The run belongs to this tab even if the user switches away; it reports to the window only while visible.
@@ -476,7 +477,7 @@ function registerIpc(): void {
           own('run:progress', progress)
           owner.presence.dispatch({ type: 'activity', activity: progress.activity })
         }
-      }, parallel, text, turn, model)
+      }, parallel, text, turn, model, effort ?? undefined)
       owner.run = activeRun
       own('agent:status', 'running')
       send('tabs', tabs())
@@ -547,6 +548,7 @@ function registerIpc(): void {
   handle('frame:export', (_e, id: unknown, format: unknown) => exportFromUi(id, format))
   handle('frame:copy-image', (_e, id: unknown) => copyImageFromUi(id))
   handle('clipboard', (_e, text: string) => clipboard.writeText(text))
+  handle('models', () => listModels())
   handle('codebase', async (_e, action: unknown) => {
     const parsed = z.enum(['get', 'choose', 'clear']).parse(action)
     if (parsed === 'choose') await chooseCodebase()

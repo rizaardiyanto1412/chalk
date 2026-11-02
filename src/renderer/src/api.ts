@@ -1,4 +1,5 @@
 import type { RunSettings, RunProgress, LiveRun } from '../../shared/run'
+import type { Effort, ModelOption } from '../../shared/models'
 import type { AgentConnection, ConnectAgentId } from '../../shared/connectAgents'
 import type { StyleChoice, StyleSummary } from '../../shared/styles'
 import type { PresenceState } from '../../shared/presence'
@@ -23,7 +24,7 @@ export interface InitState {
   mcpUrl: string
   claudePath: string | null
   styles: StyleSummary[]
-  models: readonly { id: string; label: string }[]
+  models: readonly ModelOption[]
   browser: BrowserState
   recentUrls: string[]
   tabs: ProjectTab[]
@@ -59,7 +60,8 @@ export const api = {
   deleteElements: (projectEpoch: number) => e().invoke('element:delete', projectEpoch),
   select: (ids: FrameId[]) => e().invoke('select', ids),
   browser: (action: string, arg?: unknown) => e().invoke('browser', action, arg),
-  sendAgent: (text: string, model: string, style: StyleChoice | null, parallel?: RunSettings) => e().invoke('agent:send', { text, model, style, ...(parallel ? { parallel } : {}) }),
+  sendAgent: (text: string, model: string, style: StyleChoice | null, parallel?: RunSettings, effort?: Effort | null) => e().invoke('agent:send', { text, model, style, ...(effort ? { effort } : {}), ...(parallel ? { parallel } : {}) }),
+  models: (): Promise<ModelOption[]> => e().invoke('models') as Promise<ModelOption[]>,
   showRunFrame: (id: FrameId) => e().invoke('run:show', id),
   codebase: (action: 'get' | 'choose' | 'clear'): Promise<CodebaseState> => e().invoke('codebase', action) as Promise<CodebaseState>,
   stopAgent: () => e().invoke('agent:stop'),

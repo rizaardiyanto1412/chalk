@@ -6,6 +6,7 @@ import type { AgentEvent, AgentStatus, BrowserPick, Frame, SelectedElement } fro
 import type { ResolvedStyle } from './styles'
 import { AGENT_SYSTEM, STYLE_PRECEDENCE } from './prompt'
 import { TOOL_NAMES } from './tools'
+import type { Effort } from '../shared/models'
 
 export interface TurnContext {
   priorRuns?: string
@@ -37,12 +38,6 @@ export function contextBlock(c: TurnContext): string {
   return lines.length ? `<context>\n${lines.join('\n')}\n</context>\n\n` : ''
 }
 
-export const MODELS = [
-  { id: '', label: 'Default' },
-  { id: 'opus', label: 'Opus' },
-  { id: 'sonnet', label: 'Sonnet' },
-  { id: 'claude-fable-5-1', label: 'Fable' }
-] as const
 
 export class Agent extends EventEmitter {
   status: AgentStatus = 'idle'
@@ -71,7 +66,7 @@ export class Agent extends EventEmitter {
     this.abort?.abort()
   }
 
-  async send(text: string, ctx: TurnContext, model: string): Promise<void> {
+  async send(text: string, ctx: TurnContext, model: string, effort?: Effort): Promise<void> {
     if (this.status === 'running') return
     const claude = findCli('claude')
     this.emitEvent({ type: 'user', text })
@@ -95,6 +90,7 @@ export class Agent extends EventEmitter {
             cwd: this.cwd(),
             resume: sessionId,
             model: model || undefined,
+            ...(effort ? { effort } : {}),
             systemPrompt: AGENT_SYSTEM,
             settingSources: [],
             mcpServers: { chalk: { type: 'http', url: this.mcpUrl(), alwaysLoad: true } },

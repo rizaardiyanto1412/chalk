@@ -9,6 +9,7 @@ import { AGENT_SYSTEM } from './prompt'
 import { WORKER_RULES } from './runPrompt'
 import type { ResolvedStyle } from './styles'
 import type { Codebase } from './codebase'
+import type { Effort } from '../shared/models'
 
 export interface Draft { id: FrameId; name: string; html: string; width: number; height: number; revision: number; styleBlocks?: number }
 export class DraftBook {
@@ -120,7 +121,7 @@ export class WorkerRegistry {
   revoke(token: string): void { this.contexts.delete(token) }
 }
 export interface WorkerResult { ok: boolean; canceled: boolean; error?: string; costUsd?: number }
-export interface WorkerConfig { claude: string; cwd: string; model: string; mcpUrl: string; token: string; prompt: string; tools: string[] }
+export interface WorkerConfig { claude: string; cwd: string; model: string; effort?: Effort; mcpUrl: string; token: string; prompt: string; tools: string[] }
 export async function runWorker(ctx: WorkerContext, cfg: WorkerConfig): Promise<WorkerResult> {
   let stream: ReturnType<typeof query> | undefined
   let costUsd: number | undefined
@@ -129,7 +130,7 @@ export async function runWorker(ctx: WorkerContext, cfg: WorkerConfig): Promise<
   let stderr = ''
   try {
     stream = query({ prompt: cfg.prompt, options: {
-      pathToClaudeCodeExecutable: cfg.claude, cwd: cfg.cwd, model: cfg.model || undefined,
+      pathToClaudeCodeExecutable: cfg.claude, cwd: cfg.cwd, model: cfg.model || undefined, ...(cfg.effort ? { effort: cfg.effort } : {}),
       systemPrompt: AGENT_SYSTEM + '\n\n' + WORKER_RULES,
       strictMcpConfig: true, settingSources: [], persistSession: false,
       mcpServers: { chalk: { type: 'http', url: cfg.mcpUrl, headers: { authorization: `Bearer ${cfg.token}` }, alwaysLoad: true } },
