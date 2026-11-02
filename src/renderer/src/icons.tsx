@@ -46,3 +46,18 @@ export function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
     </svg>
   )
 }
+
+/** Provider marks from Simple Icons (CC0 paths; the marks are their owners' trademarks), filled rather than stroked. */
+const BRANDS = {
+  anthropic: 'M17.304 3.541h-3.672l6.696 16.918H24Zm-10.608 0L0 20.459h3.744l1.37-3.553h7.005l1.369 3.553h3.744L10.536 3.541Zm-.371 10.223L8.616 7.82l2.291 5.945Z'
+} as const
+
+export type BrandName = keyof typeof BRANDS
+
+export function BrandMark({ brand, size = 12 }: { brand: BrandName; size?: number }) {
+  return (
+    <svg className="brand-mark-icon" width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d={BRANDS[brand]} />
+    </svg>
+  )
+}

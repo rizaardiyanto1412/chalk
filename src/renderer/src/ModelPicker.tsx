@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { EFFORTS, EFFORT_LABELS, modelName, type Effort, type ModelOption } from '../../shared/models'
-import { Icon } from './icons'
+import { BrandMark, Icon } from './icons'
 
 const SHORT: Record<Effort, string> = { low: 'Low', medium: 'Med', high: 'High', xhigh: 'XHigh', max: 'Max' }
 
@@ -28,6 +28,7 @@ export function ModelPicker({ models, model, effort, onChange, onOpen, disabled 
   }
   return <span className="model-picker" ref={root} onKeyDown={(e) => { if (e.key === 'Escape' && open) { e.stopPropagation(); close() } }}>
     <button type="button" ref={trigger} className="model-trigger" aria-label="Claude model" aria-haspopup="dialog" aria-expanded={open} disabled={disabled} title={current ? `${current.version}${current.summary ? ` · ${current.summary}` : ''}` : model} onClick={() => setOpen(!open)}>
+      <BrandMark brand="anthropic" size={11} />
       <span className="model-name">{modelName(models, model)}</span>
       {effort && <span className="model-effort">{SHORT[effort]}</span>}
       <Icon name="chevronDown" size={12} />
@@ -36,11 +37,12 @@ export function ModelPicker({ models, model, effort, onChange, onOpen, disabled 
       <fieldset><legend>Model</legend>
         {models.map((m) => <label key={m.id || 'default'} className={`model-row ${m.id === model ? 'is-on' : ''}`}>
           <input type="radio" name="model" value={m.id} checked={m.id === model} onChange={() => pick(m.id)} onKeyDown={(e) => { if (e.key === 'Enter') close() }} />
+          <span className="model-logo"><BrandMark brand="anthropic" size={12} /></span>
           <span className="model-row-text"><strong>{m.version}</strong><small>{m.summary}</small></span>
           {m.price && <span className="model-price" title={`${m.price} (input/output per million tokens)`}>{m.price.replace(/ per Mtok.*$/, '').replace(/ \(.*$/, '')}</span>}
           {m.id === model && <Icon name="check" size={13} />}
         </label>)}
-        {!current && model && <label className="model-row is-on"><input type="radio" name="model" checked readOnly /><span className="model-row-text"><strong>{model}</strong><small>Custom model ID</small></span><Icon name="check" size={13} /></label>}
+        {!current && model && <label className="model-row is-on"><input type="radio" name="model" checked readOnly /><span className="model-logo"><BrandMark brand="anthropic" size={12} /></span><span className="model-row-text"><strong>{model}</strong><small>Custom model ID</small></span><Icon name="check" size={13} /></label>}
       </fieldset>
       {efforts.length > 0 && <fieldset className="effort"><legend>Effort <small>how hard it thinks; higher is slower and costs more</small></legend>
         <div className="effort-options" role="radiogroup" aria-label="Effort">

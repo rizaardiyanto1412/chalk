@@ -424,11 +424,13 @@ body.is-resizing iframe { pointer-events: none; }
 
 /* Model picker */
 .model-picker { display: contents; }
-.model-trigger { flex: none; display: flex; align-items: center; gap: 5px; height: 26px; max-width: 132px; padding: 0 6px 0 8px; border-radius: 7px; color: var(--muted); font-size: 12px; font-weight: 500; white-space: nowrap; }
+.model-trigger { flex: none; display: flex; align-items: center; gap: 5px; height: 26px; max-width: 168px; padding: 0 6px 0 8px; border-radius: 7px; color: var(--muted); font-size: 12px; font-weight: 500; white-space: nowrap; }
 .model-trigger:hover:not(:disabled), .model-trigger[aria-expanded="true"] { background: var(--hover); color: var(--text); }
 .model-trigger:disabled { opacity: .5; }
 .model-trigger:focus-visible, .codebase > button:focus-visible, .model-custom input:focus-visible { outline: 2px solid #7359dc; outline-offset: 1px; }
 .model-trigger > svg { flex-shrink: 0; opacity: .7; }
+.model-trigger > .brand-mark-icon { opacity: 1; color: #191919; }
+.model-logo { flex-shrink: 0; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: #f4f1ec; color: #191919; }
 .model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .model-effort { flex-shrink: 0; padding: 1px 5px; border-radius: 5px; background: var(--hover); color: var(--muted); font-size: 10.5px; }
 .model-popover { padding: 10px; }
