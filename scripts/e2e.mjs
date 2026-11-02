@@ -2,7 +2,7 @@ import { _electron as electron } from 'playwright-core'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { createServer } from 'node:http'
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, symlinkSync, realpathSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, symlinkSync, realpathSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { PNG } from 'pngjs'
 import { tmpdir } from 'node:os'
@@ -63,7 +63,7 @@ await new Promise((r) => site.listen(PORT + 1, '127.0.0.1', r))
 const SITE = `http://127.0.0.1:${PORT + 1}`
 
 const launch = () =>
-  electron.launch({ args: [root, `--user-data-dir=${profile}`], cwd: root, env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'ELECTRON_RUN_AS_NODE')), CHALK_CLAUDE_PATH: join(root, 'scripts/fixtures/fake-claude.mjs'), CHALK_FAKE_LOG: fakeLog, ...agents.env, CHALK_PROJECT_DIR: project, CHALK_PORT: String(PORT), ELECTRON_RENDERER_URL: '' } })
+  electron.launch({ args: [root, `--user-data-dir=${profile}`], cwd: root, env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'ELECTRON_RUN_AS_NODE')), CHALK_CLAUDE_PATH: join(root, 'scripts/fixtures/fake-claude.mjs'), CHALK_CODEX_PATH: join(root, 'scripts/fixtures/fake-codex.mjs'), CHALK_FAKE_CODEX_LOG: join(artifacts, 'fake-codex.jsonl'), CHALK_FAKE_LOG: fakeLog, ...agents.env, CHALK_PROJECT_DIR: project, CHALK_PORT: String(PORT), ELECTRON_RENDERER_URL: '' } })
 
 async function mcp() {
   const client = new Client({ name: 'e2e', version: '0' })
@@ -114,7 +114,7 @@ await check('MCP lists the shared canvas, design, and browser tools', async () =
   const { tools } = await client.listTools()
   assert.deepEqual(tools.map((t) => t.name).sort(), [
     'get_canvas', 'get_frame', 'screenshot_frame', 'review_frame', 'export_frame', 'copy_frame_image', 'create_frame', 'update_frame', 'edit_frame', 'delete_frame',
-    'get_style', 'get_design_guidelines', 'search_photos', 'check_numbers', 'browser_state', 'browser_navigate', 'browser_snapshot', 'browser_click',
+    'get_style', 'get_design_guidelines', 'search_photos', 'generate_image', 'check_numbers', 'browser_state', 'browser_navigate', 'browser_snapshot', 'browser_click',
     'browser_set_device', 'browser_type', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_capture_to_canvas', 'browser_extract_styles'
   ].sort())
   assert.equal(tools.find((t) => t.name === 'get_style').annotations.readOnlyHint, true)
@@ -206,6 +206,31 @@ await check('review_frame measures overflow and failed images, then reflects a r
     assert.equal(after.pendingImages, 0)
   } finally {
     await call(client, 'delete_frame', { id: out.created.id })
+  }
+})
+
+await check('generate_image runs the local Codex CLI in a throwaway folder and saves a project asset frames can use', async () => {
+  const out = await call(client, 'generate_image', { prompt: 'A celadon ceramic pendant lamp glowing in a dim studio', shape: 'portrait' })
+  assert.equal(out[0].type, 'image')
+  const made = JSON.parse(out[1].text)
+  assert.match(made.src, /^\/assets\/gen-[\w-]+\.png$/)
+  assert.deepEqual([made.width, made.height], [64, 96])
+  assert.ok(existsSync(join(project, made.src.slice(1))), 'the image is saved inside the project assets')
+  const run = readFileSync(join(artifacts, 'fake-codex.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)).at(-1)
+  assert.deepEqual(run.args.slice(0, 5), ['exec', '--skip-git-repo-check', '--ephemeral', '--sandbox', 'workspace-write'])
+  assert.notEqual(run.cwd, project, 'Codex never runs inside the project folder')
+  assert.match(run.args.at(-1), /Shape: portrait/)
+  const frame = json(await call(client, 'create_frame', { name: 'Generated image fixture', width: 390, height: 200, html: `<img src="${made.src}" class="w-full h-48 object-cover">` })).created
+  try {
+    const review = JSON.parse((await call(client, 'review_frame', { id: frame.id }))[1].text)
+    assert.deepEqual(review.failedImages, [], 'the frame loads the generated asset')
+  } finally {
+    await call(client, 'delete_frame', { id: frame.id })
+  }
+  for (const [marker, message] of [['[codex-fail]', /exited with code 3: not signed in/], ['[codex-no-file]', /without saving an image/]]) {
+    const failed = await client.callTool({ name: 'generate_image', arguments: { prompt: `${marker} a lamp in a studio` } })
+    assert.equal(failed.isError, true)
+    assert.match(failed.content[0].text, message)
   }
 })
 

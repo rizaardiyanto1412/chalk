@@ -70,8 +70,20 @@ async function managed(request) {
       const bad = await call('create_frame', { name: 'Rejected script', html: '<script>1</script><div>Bad</div>', width: 640, height: 140 })
       log({ type: 'script-rejected', pid: process.pid, isError: !!bad.isError })
     }
+    let picture = ''
+    if (prompt.includes('[generate-image]') && job.role !== 'integrate') {
+      const unused = await call('generate_image', { prompt: `A discarded attempt for ${job.label}` })
+      if (unused.isError) throw new Error(unused.content[0].text)
+      const made = await call('generate_image', { prompt: `A ceramic lamp for ${job.label}` })
+      if (made.isError) throw new Error(made.content[0].text)
+      for (let i = 0; i < 2; i++) {
+        const extra = await call('generate_image', { prompt: `One more image for ${job.label}` })
+        log({ type: 'image-cap', pid: process.pid, i, isError: !!extra.isError })
+      }
+      picture = `<img src="${json({ content: [made.content[1]] }).src}" style="width:100%;height:60px;object-fit:cover">`
+    }
     for (let i = 0; i < job.maxDrafts; i++) {
-      const response = await call('create_frame', { name: `${job.label} ${i + 1}`, html: `${prompt.includes('[section:style]') ? '<style>.brand { font-family: Georgia, serif }</style>' : ''}<div class="brand [&>span]:text-[#123456]" style="height:140px;background:#f5e8d5;color:#123456">Variant ${job.group + 1} ${job.label} screen ${i + 1}</div>`, width: 640, height: 140 })
+      const response = await call('create_frame', { name: `${job.label} ${i + 1}`, html: `${picture}${prompt.includes('[section:style]') ? '<style>.brand { font-family: Georgia, serif }</style>' : ''}<div class="brand [&>span]:text-[#123456]" style="height:140px;background:#f5e8d5;color:#123456">Variant ${job.group + 1} ${job.label} screen ${i + 1}</div>`, width: 640, height: 140 })
       if (response.isError) throw new Error(response.content[0].text)
       record.draftId = json(response).created.id
     }

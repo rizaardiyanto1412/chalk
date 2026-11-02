@@ -14,7 +14,7 @@ The run card shows queued, running, completed, failed and canceled tasks. **Stop
 
 Every managed Send captures the visible HTTP(S) page as a reference, including a logged-in page. The selected settings stay active until you change them.
 
-Each worker can browse public pages in an isolated temporary browser. Its cookies and snapshot references are separate from other workers and the visible browser. Authenticated references come from a read-only capture of the visible page at Send. Workers cannot publish browser captures, create local assets, export files or write the clipboard. Use ordinary mode when those actions are needed.
+Each worker can browse public pages in an isolated temporary browser. Its cookies and snapshot references are separate from other workers and the visible browser. Authenticated references come from a read-only capture of the visible page at Send. Workers can generate images with the local Codex CLI. Each generated image is saved into the project's assets, and published frames link to it. Workers cannot publish browser captures, create other local assets, export files or write the clipboard. Use ordinary mode when those actions are needed.
 
 Runs use the local Claude CLI through the Agent SDK. The CLI must support structured JSON-schema output. Invalid plans fail before workers start. Plans support up to 12 screens per alternative and six complementary units. Oversized plans fail instead of truncating screens.
 

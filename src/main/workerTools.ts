@@ -10,6 +10,7 @@ import { resolveStyle, styleInputSchema } from './styles'
 import { DESIGN_GUIDE } from './prompt'
 import { screenTypeSchema, SCREEN_GUIDES } from './design'
 import { contactSheet, searchPhotos } from './photos'
+import { generateImage } from './imagegen'
 
 export interface WorkerTool {
   name: string
@@ -58,7 +59,7 @@ export function frozenHtml(html: string, ctx: Pick<WorkerContext, 'refs' | 'orig
   return localCanvasUrls(html, ctx.origin(), (url, source) => {
     if (url.pathname.startsWith('/frame/')) throw new Error('Live canvas embeds cannot be rendered as frozen references. Use captured HTML or assets.')
     const asset = /^\/assets\/([\w.-]+)$/.exec(url.pathname)?.[1]
-    if (!asset) return source
+    if (!asset || ctx.refs.generated?.has(asset)) return source
     const bytes = ctx.refs.assets.get(asset)
     if (!bytes) throw new Error(`Local asset ${asset} was not captured in the references.`)
     return `data:image/png;base64,${bytes.toString('base64')}`
@@ -83,6 +84,8 @@ async function renderFrame(ctx: WorkerContext, id: string, review: boolean): Pro
     return [image(result.png)]
   } finally { preview.dispose() }
 }
+const IMAGES_PER_JOB = 3
+const generatedBy = new WeakMap<WorkerContext, number>()
 const browser = <S extends z.ZodRawShape>(name: string, description: string, input: S, operation: (args: z.infer<z.ZodObject<S>>, b: import('./browser').Browser) => Promise<Content[]>, readOnly = false) => tool(name, description, input, (args, ctx) => ctx.resources.useBrowser(ctx, b => operation(args, b)), readOnly)
 export const WORKER_TOOLS: WorkerTool[] = [
   tool('get_canvas', 'List only frozen selected references and your own drafts. Positions are assigned by main on completion.', {}, async (_a, ctx) => [text({ frames: [...ctx.refs.frames.map(frameSummary), ...ctx.drafts.list()], selectedFrameIds: ctx.refs.frames.map(f => f.id), selectedElements: ctx.refs.selectedElements, browserPick: ctx.refs.browserPick })], true),
@@ -151,6 +154,18 @@ export const WORKER_TOOLS: WorkerTool[] = [
       return [image(result.png), text({ provider: found.provider, photos: found.photos.map(({ thumb: _thumb, ...p }) => p) })]
     } finally { preview.dispose() }
   }, true),
+  tool('generate_image', 'Generate an original image with the user\'s local Codex CLI (about a minute and part of the user\'s Codex usage). At most 3 per job: plan them first, then reuse each one across sections with object-cover and object-position. Returns a preview and a src such as /assets/gen-1a2b3c4d.png; use it exactly.', { prompt: z.string().min(10).max(2000), shape: z.enum(['landscape', 'portrait', 'square']).optional() }, async ({ prompt, shape }, ctx) => {
+    if (ctx.job.role === 'integrate') throw new Error('Integrators cannot generate images.')
+    const used = generatedBy.get(ctx) ?? 0
+    if (used >= IMAGES_PER_JOB) throw new Error(`This job already generated ${IMAGES_PER_JOB} images. Reuse them: crop with object-cover and object-position, or use search_photos.`)
+    generatedBy.set(ctx, used + 1)
+    const made = await generateImage(prompt, shape ?? 'landscape')
+    ctx.resources.check(ctx)
+    const name = `gen-${newId()}.png`
+    ctx.saveAsset(name, made.png)
+    ctx.refs.generated?.add(name)
+    return [image(made.png), text({ src: `/assets/${name}`, width: made.width, height: made.height, seconds: made.seconds })]
+  }),
   browser('browser_navigate', 'Navigate your private browser to a public HTTP(S) page. Local addresses and Chalk endpoints are blocked. No logged-in state is inherited.', { url: z.string() }, async ({ url }, b) => [text(await b.navigate(url))]),
   browser('browser_snapshot', 'Read your private page and its browser-specific refs. Other jobs cannot use these refs.', {}, async (_a, b) => [text(await b.snapshot())], true),
   browser('browser_click', 'Click a ref from your private snapshot.', { ref: z.string() }, async ({ ref }, b) => [text(await b.click(ref))]),

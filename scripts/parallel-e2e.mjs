@@ -40,7 +40,7 @@ export async function checkParallel({ root, artifacts, check }) {
     let instance, win
     const start = async () => {
       instance = await electron.launch({ args: [root, `--user-data-dir=${profile}`], cwd: root,
-        env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'ELECTRON_RUN_AS_NODE')), CHALK_PROJECT_DIR: project, CHALK_CLAUDE_PATH: join(root, 'scripts/fixtures/fake-claude.mjs'), CHALK_FAKE_PARALLEL: '1', CHALK_FAKE_HISTORY: '1', CHALK_FAKE_LOG: log, CHALK_FAKE_DIR: dir, CHALK_PORT: String(chosenPort), ELECTRON_RENDERER_URL: '' } })
+        env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'ELECTRON_RUN_AS_NODE')), CHALK_PROJECT_DIR: project, CHALK_CLAUDE_PATH: join(root, 'scripts/fixtures/fake-claude.mjs'), CHALK_CODEX_PATH: join(root, 'scripts/fixtures/fake-codex.mjs'), CHALK_FAKE_PARALLEL: '1', CHALK_FAKE_HISTORY: '1', CHALK_FAKE_LOG: log, CHALK_FAKE_DIR: dir, CHALK_PORT: String(chosenPort), ELECTRON_RENDERER_URL: '' } })
       assert.equal(realpathSync(await instance.evaluate(({ app }) => app.getPath('userData'))), profile)
       win = await instance.firstWindow()
       await win.waitForSelector('.chat textarea')
@@ -634,6 +634,24 @@ store.projectEpoch++; const result = Reflect.get(run, 'commit').call(run, { labe
     assert.equal(back.doc.frames.length, 3)
     assert.ok(back.doc.frames.some(fr => fr.id === original.id))
     assert.ok((await f.history()).events.some(e => e.type === 'notice' && e.run?.kind === 'finished'), 'the run reported into its own chat')
+  })
+  await test('T20 workers generate images with Codex and published frames link the project asset', async f => {
+    await f.send(settings(2, 2), 'Design the requested page. [generate-image]')
+    for (const h of await f.waitHeld(2)) f.release(h)
+    await f.idle()
+    const frames = (await f.init()).doc.frames
+    assert.equal(frames.length, 2)
+    for (const frame of frames) {
+      const src = /src="(\/assets\/gen-[\w-]+\.png)"/.exec(frame.html)?.[1]
+      assert.ok(src, 'published HTML links the generated asset instead of inlining it')
+      assert.equal(frame.html.includes('data:image'), false)
+      assert.ok(existsSync(join(f.project, src.slice(1))), 'the generated file lives in the project assets')
+    }
+    const caps = f.logs().filter(l => l.type === 'image-cap')
+    assert.deepEqual(caps.filter(c => c.i === 0).map(c => c.isError), [false, false], 'the third image per job is allowed')
+    assert.deepEqual(caps.filter(c => c.i === 1).map(c => c.isError), [true, true], 'the fourth image per job is refused')
+    const linked = frames.map(fr => /gen-[\w-]+\.png/.exec(fr.html)[0]).sort()
+    assert.deepEqual(readdirSync(join(f.project, 'assets')).filter(n => n.startsWith('gen-')).sort(), linked, 'unused generated images are removed when the run ends')
   })
   await test('T16 popovers support keyboard named inputs disabled modes and one count announcement', async f => {
     const variations = f.win.getByRole('button', { name: 'Variations', exact: true })

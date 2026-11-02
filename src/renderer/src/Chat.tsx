@@ -19,6 +19,7 @@ const TOOL_LABELS: Record<string, string> = {
   screenshot_frame: 'Reviewed frame',
   review_frame: 'Checked frame layout',
   check_numbers: 'Checked numbers',
+  generate_image: 'Generated image',
   get_style: 'Explored visual style',
   get_design_guidelines: 'Read design guide',
   browser_state: 'Checked browser',

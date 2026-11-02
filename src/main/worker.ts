@@ -60,6 +60,8 @@ export interface ReferenceSet {
   readonly page: PageCapture | null
   readonly designNotes: string
   readonly style: ResolvedStyle | null
+  /** Project assets this run's workers generated. Published frames link to them instead of inlining them. */
+  readonly generated?: Set<string>
 }
 export interface WorkerContext {
   readonly job: JobSpec
@@ -70,6 +72,7 @@ export interface WorkerContext {
   readonly origin: () => string
   readonly photoKeys: () => PhotoKeys
   readonly measure: (html: string, width: number) => Promise<number>
+  readonly saveAsset: (name: string, bytes: Buffer) => void
   readonly activity: (tool: string, args?: unknown) => void
   readonly resources: WorkerResources
 }

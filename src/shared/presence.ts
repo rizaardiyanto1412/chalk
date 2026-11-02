@@ -58,7 +58,7 @@ const ACTIVITIES: Record<string, string> = {
   review_frame: 'Reviewing frame', screenshot_frame: 'Reviewing frame',
   export_frame: 'Exporting frame', copy_frame_image: 'Copying frame',
   get_style: 'Exploring styles', get_design_guidelines: 'Reading design guide',
-  search_photos: 'Finding photos', check_numbers: 'Checking numbers', WebFetch: 'Reading page', WebSearch: 'Searching'
+  search_photos: 'Finding photos', generate_image: 'Generating image', check_numbers: 'Checking numbers', WebFetch: 'Reading page', WebSearch: 'Searching'
 }
 
 export const activityForTool = (name: string): string => ACTIVITIES[name] ?? 'Thinking'

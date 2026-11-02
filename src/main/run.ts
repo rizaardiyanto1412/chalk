@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { nextSlot, FRAME_GAP, type AgentEvent, type FrameId, type Op, type RunNoticeMeta } from '../shared/model'
 import { directionCount, expandJobs, integratorFor, isSplit, jobIdSchema, mergeSections, partCoverage, planJsonSchema, planSchema, runIdSchema, type JobSpec, type Plan, type RunProgress, type RunSettings } from '../shared/run'
@@ -62,7 +62,7 @@ export class Run {
       if (total > 40 * 1024 * 1024) throw new Error('Selected reference assets exceed 40 MB.')
       assets.set(name, Buffer.from(bytes))
     }
-    this.refsAtSend = Object.freeze({ frames: Object.freeze(frames), assets, selectedElements: structuredClone(turn.selectedElements), browserPick: structuredClone(turn.browserPick), designNotes: projectDesignNotes(this.dir), style: turn.style ? structuredClone(turn.style) : null })
+    this.refsAtSend = Object.freeze({ frames: Object.freeze(frames), assets, selectedElements: structuredClone(turn.selectedElements), browserPick: structuredClone(turn.browserPick), designNotes: projectDesignNotes(this.dir), style: turn.style ? structuredClone(turn.style) : null, generated: new Set<string>() })
   }
   stop(): void {
     if (this.phase !== 'running') return
@@ -143,6 +143,7 @@ export class Run {
       this.notice(`Design run ${outcome} · ${this.committed.length} frame(s).`, { kind: 'finished', runId: this.id, outcome, frameIds: this.committed, costUsd: this.costUsd, costComplete: this.costComplete, durationMs })
       this.deps.emit({ type: 'done', costUsd: this.costUsd, durationMs })
       this.deps.live.clear(this.id)
+      this.dropUnusedImages()
       this.phase = 'finished'
     }
   }
@@ -196,7 +197,7 @@ export class Run {
     })
     live.start(this.id, job)
     const controller = new AbortController()
-    const ctx: WorkerContext = { job, refs, drafts, controller, signal: controller.signal, origin: this.deps.origin, photoKeys: this.deps.photoKeys, measure: this.deps.measure, resources: new WorkerResources(), activity: (activity, args) => {
+    const ctx: WorkerContext = { job, refs, drafts, controller, signal: controller.signal, origin: this.deps.origin, photoKeys: this.deps.photoKeys, measure: this.deps.measure, saveAsset: (name, bytes) => writeFileSync(this.deps.store.assetPath(name), bytes), resources: new WorkerResources(), activity: (activity, args) => {
       if (this.phase !== 'running') return
       this.deps.progress({ runId: this.id, jobId: job.id, activity })
       live.activity(this.id, job, activity, args)
@@ -281,6 +282,13 @@ export class Run {
     this.seeds.set(integrator.id, seed)
     this.fallbacks.set(integrator.id, seed)
     this.queue.unshift(integrator)
+  }
+  /** Generated images no published frame links are deleted, so drafts and dropped attempts don't pile up in assets. */
+  private dropUnusedImages(): void {
+    const generated = this.refsAtSend.generated
+    if (!generated?.size || this.deps.store.dir !== this.dir) return
+    const linked = this.deps.store.doc.frames.map(f => (f.kind === 'html' ? f.html : '')).join('\n')
+    for (const name of generated) if (!linked.includes(`/assets/${name}`)) rmSync(this.deps.store.assetPath(name), { force: true })
   }
   private commit(job: JobSpec, drafts: readonly Readonly<Draft>[], refs: ReferenceSet): FrameId[] {
     const store = this.deps.store
