@@ -27,10 +27,10 @@ export function RunControls({ value, onChange, disabled, children }: { value: Ru
   return <div className="run-controls" ref={root} onKeyDown={e => { if (e.key === 'Escape' && open) { e.stopPropagation(); close() } }}>
     <div className="run-triggers">
       <button type="button" ref={variations} aria-label="Variations" aria-haspopup="dialog" aria-expanded={open === 'variations'} disabled={disabled} onClick={() => setOpen(open === 'variations' ? null : 'variations')}>
-        <span aria-hidden="true">◫</span> {value.variations.axis === 'off' ? 'Variations off' : `${value.variations.axis === 'layout' ? 'Layout' : 'Style'} ×${value.variations.count}`}
+        <span aria-hidden="true">◫</span> {value.variations.axis === 'off' ? '1 design' : `${value.variations.axis === 'layout' ? 'Layout' : 'Style'} ×${value.variations.count}`}
       </button>
-      <button type="button" ref={agents} aria-label="Parallel agents" aria-haspopup="dialog" aria-expanded={open === 'agents'} disabled={disabled} onClick={() => setOpen(open === 'agents' ? null : 'agents')}>
-        <span aria-hidden="true">⫶</span> {value.agents} {value.agents === 1 ? 'agent' : 'agents'}
+      <button type="button" ref={agents} aria-label="Parallel agents" title={`${value.agents} ${value.agents === 1 ? 'agent' : 'agents'} at a time`} aria-haspopup="dialog" aria-expanded={open === 'agents'} disabled={disabled} onClick={() => setOpen(open === 'agents' ? null : 'agents')}>
+        <span aria-hidden="true">⫶</span> {value.agents}
       </button>
       {children}
     </div>
@@ -55,6 +55,11 @@ export function RunControls({ value, onChange, disabled, children }: { value: Ru
       </>}
       <p>Creates new frames. Selected frames stay unchanged.</p>
     </div>}
-    {!isOrdinary(value) && <div className="run-estimate">{directionCount(value)} results · up to {taskBound(value)} tasks · {value.agents} at a time</div>}
   </div>
+}
+
+/** What the next send will start, shown only when it starts more than one ordinary agent turn. */
+export function RunEstimate({ value }: { value: RunSettings }) {
+  if (isOrdinary(value)) return null
+  return <div className="run-estimate">{directionCount(value)} results · up to {taskBound(value)} tasks · {value.agents} at a time</div>
 }

@@ -289,7 +289,7 @@ await check('a linked codebase is readable by the agent, hides secrets and outsi
     await win.getByRole('button', { name: 'Codebase' }).click()
     await win.getByRole('dialog', { name: 'Codebase' }).getByText('A product brief from it is saved').waitFor()
     await win.getByRole('button', { name: 'Remove' }).click()
-    await win.getByRole('button', { name: 'Codebase' }).filter({ hasText: 'Add codebase' }).waitFor()
+    await win.getByRole('button', { name: 'Codebase' }).filter({ hasText: /^\s*Codebase\s*$/ }).waitFor()
     await fail('code_list', {}, /No codebase folder is linked/)
   } finally {
     await app.evaluate(({ dialog }) => { if (globalThis.originalCodebaseDialog) dialog.showOpenDialog = globalThis.originalCodebaseDialog })

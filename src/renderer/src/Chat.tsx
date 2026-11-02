@@ -1,5 +1,5 @@
 import { foldRuns, type RunProgress } from '../../shared/run'
-import { RunControls, savedRunSettings } from './RunControls'
+import { RunControls, RunEstimate, savedRunSettings } from './RunControls'
 import { CodebaseButton } from './CodebaseButton'
 import { RunCard } from './RunCard'
 import { useEffect, useRef, useState } from 'react'
@@ -213,8 +213,8 @@ export function Chat({ history, status, presence, models, claudePath, selectedFr
             {selectedFrames.length > 0 && <button className="chip-clear" onClick={onClearSelection}>Clear</button>}
           </div>
         )}
-        <RunControls value={parallel} onChange={setParallel} disabled={running}><CodebaseButton disabled={running} model={model} /></RunControls>
         <div className="input-box">
+          <RunEstimate value={parallel} />
           <textarea
             ref={box}
             rows={2}
@@ -229,7 +229,7 @@ export function Chat({ history, status, presence, models, claudePath, selectedFr
             }}
           />
           <div className="input-foot">
-            <span className="input-hint">{stopping ? 'Stopping…' : running ? 'Working…' : 'Enter to send'}</span>
+            <RunControls value={parallel} onChange={setParallel} disabled={running}><CodebaseButton disabled={running} model={model} /></RunControls>
             <select
               value={model}
               onChange={(e) => {
@@ -241,7 +241,7 @@ export function Chat({ history, status, presence, models, claudePath, selectedFr
               {models.map((m) => <option key={m.id} value={m.id}>{m.label === 'Default' ? 'Default model' : m.label}</option>)}
             </select>
             {running ? (
-              <button className="send is-stop" onClick={() => api.stopAgent()} title="Stop" aria-label="Stop"><Icon name="stop" size={12} /></button>
+              <button className="send is-stop" onClick={() => api.stopAgent()} title={stopping ? 'Stopping…' : 'Stop'} aria-label="Stop"><Icon name="stop" size={12} /></button>
             ) : (
               <button className="send" onClick={() => send(text)} disabled={!text.trim()} title="Send (Enter)"><Icon name="send" size={14} /></button>
             )}

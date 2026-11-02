@@ -134,13 +134,12 @@ body.is-resizing iframe { pointer-events: none; }
 .chip button { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 4px; }
 .chip button:hover { background: rgb(0 0 0 / 0.06); }
 .chip-clear { height: 24px; padding: 0 6px; color: var(--muted); font-size: 12px; }
-.input-box { border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 0.03); }
-.input-box:focus-within { border-color: #c4c4cc; }
-.input-box textarea { display: block; width: 100%; resize: none; border: 0; outline: none; padding: 10px 12px 4px; line-height: 1.45; max-height: 220px; background: transparent; }
-.input-foot { display: flex; align-items: center; gap: 6px; padding: 4px 6px 6px 12px; }
-.input-hint { flex: 1; color: var(--faint); font-size: 11.5px; }
-.input-foot select { height: 26px; padding: 0 4px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 12px; }
-.input-foot select:hover { background: var(--hover); color: var(--text); }
+.input-box { position: relative; border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 0.03), 0 4px 16px rgb(0 0 0 / 0.04); transition: border-color 120ms, box-shadow 120ms; }
+.input-box:focus-within { border-color: #c4c4cc; box-shadow: 0 1px 2px rgb(0 0 0 / 0.03), 0 6px 20px rgb(0 0 0 / 0.07); }
+.input-box textarea { display: block; width: 100%; resize: none; border: 0; outline: none; padding: 12px 14px 6px; line-height: 1.45; min-height: 56px; max-height: 220px; background: transparent; }
+.input-foot { display: flex; align-items: center; gap: 4px; padding: 4px 8px 8px; }
+.input-foot select { flex: none; field-sizing: content; height: 26px; max-width: 120px; padding: 0 2px 0 6px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; }
+.input-foot select:hover, .input-foot select:focus-visible { background: var(--hover); color: var(--text); outline: none; }
 .send { flex: none; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: var(--text); color: #fff; }
 .send:disabled { background: #d4d4d8; opacity: 1; }
 .send.is-stop { background: #fff; color: var(--text); border: 1px solid var(--line); }
@@ -380,14 +379,16 @@ body.is-resizing iframe { pointer-events: none; }
 .modal-actions .connect-learn:hover { color: var(--text); }
 .connect-modal button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-.run-controls { position: relative; margin: 0 0 8px; font-size: 12px; }
-.run-triggers { display: flex; gap: 6px; }
-.run-triggers button { display: flex; align-items: center; gap: 6px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--muted); font: inherit; }
-.run-triggers button[aria-expanded="true"] { background: var(--hover); color: var(--text); }
+.run-controls { flex: 1; min-width: 0; font-size: 12px; }
+.run-triggers { display: flex; gap: 2px; min-width: 0; }
+.run-triggers button { flex: none; display: flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font: inherit; font-weight: 500; white-space: nowrap; }
+.run-triggers button:hover:not(:disabled), .run-triggers button[aria-expanded="true"] { background: var(--hover); color: var(--text); }
 .run-triggers button:disabled { opacity: .5; }
+.run-triggers button > span[aria-hidden] { font-size: 13px; line-height: 1; opacity: .8; }
 .codebase { display: contents; }
-.codebase > button { min-width: 0; max-width: 160px; }
+.codebase > button { flex: 0 1 auto !important; min-width: 0; }
 .codebase > button > svg { flex-shrink: 0; }
+.codebase > button > span { overflow: hidden; text-overflow: ellipsis; }
 .codebase-popover strong { display: block; font-size: 13px; color: var(--text); }
 .codebase-popover p { margin: 6px 0 0; color: var(--muted); line-height: 1.45; }
 .codebase-path { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
@@ -396,7 +397,7 @@ body.is-resizing iframe { pointer-events: none; }
 .codebase-actions button.is-primary { background: var(--text); border-color: var(--text); color: var(--panel); }
 .codebase-actions button:disabled { opacity: .5; }
 .run-triggers button:focus-visible, .run-popover input:focus-visible, .run-card button:focus-visible { outline: 2px solid #7359dc; outline-offset: 2px; }
-.run-popover { position: absolute; z-index: 30; bottom: 100%; left: 0; width: min(300px, 100%); padding: 14px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel, #fff); box-shadow: 0 8px 32px #0002; }
+.run-popover { position: absolute; z-index: 30; bottom: 100%; left: 0; right: 0; padding: 14px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel, #fff); box-shadow: 0 8px 32px #0002; }
 .run-popover fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .run-popover legend { font-size: 12px; font-weight: 600; margin-bottom: 8px; }
 .run-option { display: flex; align-items: flex-start; gap: 8px; padding: 8px 0; cursor: pointer; }
@@ -407,7 +408,7 @@ body.is-resizing iframe { pointer-events: none; }
 .run-number { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0 12px; }
 .run-number input { width: 52px; padding: 5px; border-radius: 5px; border: 1px solid var(--line); color: var(--text); background: var(--bg); }
 .run-popover p { color: var(--muted); line-height: 1.5; font-size: 11px; margin: 10px 0 0; }
-.run-estimate { color: var(--muted); font-size: 11px; margin-top: 7px; }
+.run-estimate { display: flex; align-items: center; gap: 6px; margin: 6px 6px 0; padding: 5px 8px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-size: 11.5px; font-weight: 500; }
 .run-card { border: 1px solid var(--line); border-radius: 10px; margin: 12px 0; padding: 12px; font-size: 12px; }
 .run-card-head { display: flex; justify-content: space-between; gap: 8px; }
 .run-card-head strong { font-weight: 600; }

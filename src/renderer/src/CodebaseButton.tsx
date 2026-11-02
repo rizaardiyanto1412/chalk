@@ -23,7 +23,7 @@ export function CodebaseButton({ disabled, model }: { disabled: boolean; model: 
   const choose = async () => setState(await api.codebase('choose'))
   return <span className="codebase" ref={root} onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false) }}>
     <button type="button" aria-label="Codebase" aria-haspopup="dialog" aria-expanded={open} title={state?.path ?? 'Link a codebase so the agent can learn the product'} onClick={() => (state ? setOpen(!open) : void choose())}>
-      <Icon name="code" size={12} /> {state ? state.name : 'Add codebase'}
+      <Icon name="code" size={12} /> <span>{state ? state.name : 'Codebase'}</span>
     </button>
     {open && state && <div className="run-popover codebase-popover" role="dialog" aria-label="Codebase">
       <strong>{state.name}</strong>
