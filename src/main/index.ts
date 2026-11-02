@@ -25,6 +25,7 @@ import { findCli } from './agentCli'
 import { Run } from './run'
 import { WorkerRegistry, type PageCapture } from './worker'
 import { Workspace } from './workspace'
+import { Codebase, hasProductBrief, saveCodebase } from './codebase'
 import { isOrdinary, priorRunNote, runSettingsSchema } from '../shared/run'
 
 let win: BrowserWindow | null = null
@@ -129,8 +130,21 @@ function openProject(dir: string): void {
   send('agent:status', ws.busy ? 'running' : 'idle')
   send('presence', ws.presence.state)
   send('run:live', ws.live.state())
+  send('codebase', codebaseState())
   void browser.present(ws.presence.state.visual).catch(() => {})
   send('tabs', tabs())
+}
+
+const codebaseState = () => (ws.codebase ? { name: ws.codebase.name, path: ws.codebase.root, hasBrief: hasProductBrief(ws.dir) } : null)
+
+async function chooseCodebase(): Promise<void> {
+  if (!win) return
+  const owner = ws
+  const res = await dialog.showOpenDialog(win, { title: 'Link a codebase', message: 'Chalk\'s agent can read this folder (read-only) to learn the product before designing.', defaultPath: owner.codebase?.root ?? homedir(), properties: ['openDirectory'] })
+  if (res.canceled || !res.filePaths[0]) return
+  owner.codebase = new Codebase(res.filePaths[0])
+  saveCodebase(owner.dir, owner.codebase.root)
+  if (owner === ws) send('codebase', codebaseState())
 }
 
 function closeProject(dir: string): void {
@@ -350,7 +364,8 @@ function registerIpc(): void {
     tabs: tabs(),
     agentStatus: ws.busy ? 'running' : 'idle',
     chatHistory: ws.chats.state(),
-    presence: ws.presence.state
+    presence: ws.presence.state,
+    codebase: codebaseState()
   }))
   handle('op', (_e, input: Op | Op[]) => {
     const ops = Array.isArray(input) ? input : [input]
@@ -441,7 +456,7 @@ function registerIpc(): void {
       const resolved = style ? loadStyle({ name: style.id, variant: style.variant }) : null
       if (style && resolved?.id !== style.id) throw new Error('Style attachments require a canonical style ID from the catalog.')
       const selectedFrames = ws.store.selection.flatMap((id) => findFrame(ws.store.doc, id) ?? [])
-      const turn = { selectedFrames, selectedElements: ws.store.selectedElements, browserPick: ws.store.browserPick, browserUrl: browser.state().url, style: resolved, priorRuns: priorRunNote(ws.chats.current.events, ws.store.doc.frames) ?? undefined }
+      const turn = { codebase: ws.codebase ? { name: ws.codebase.name, hasBrief: hasProductBrief(ws.dir) } : undefined, selectedFrames, selectedElements: ws.store.selectedElements, browserPick: ws.store.browserPick, browserUrl: browser.state().url, style: resolved, priorRuns: priorRunNote(ws.chats.current.events, ws.store.doc.frames) ?? undefined }
       if (!parallel || isOrdinary(parallel)) {
         void ws.agent.send(text, turn, model)
         return
@@ -532,6 +547,16 @@ function registerIpc(): void {
   handle('frame:export', (_e, id: unknown, format: unknown) => exportFromUi(id, format))
   handle('frame:copy-image', (_e, id: unknown) => copyImageFromUi(id))
   handle('clipboard', (_e, text: string) => clipboard.writeText(text))
+  handle('codebase', async (_e, action: unknown) => {
+    const parsed = z.enum(['get', 'choose', 'clear']).parse(action)
+    if (parsed === 'choose') await chooseCodebase()
+    if (parsed === 'clear') {
+      ws.codebase = null
+      saveCodebase(ws.dir, null)
+      send('codebase', null)
+    }
+    return codebaseState()
+  })
   handle('settings:photoKeys', (_e, next?: unknown) => {
     if (next !== undefined) {
       const keys = z.object({ unsplash: z.string().trim().max(200), pexels: z.string().trim().max(200) }).parse(next)

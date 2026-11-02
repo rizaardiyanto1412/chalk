@@ -84,6 +84,10 @@ async function renderFrame(ctx: WorkerContext, id: string, review: boolean): Pro
     return [image(result.png)]
   } finally { preview.dispose() }
 }
+function linkedCode(ctx: WorkerContext) {
+  if (!ctx.refs.codebase) throw new Error('No codebase is linked to this project.')
+  return ctx.refs.codebase
+}
 const IMAGES_PER_JOB = 3
 const generatedBy = new WeakMap<WorkerContext, number>()
 const browser = <S extends z.ZodRawShape>(name: string, description: string, input: S, operation: (args: z.infer<z.ZodObject<S>>, b: import('./browser').Browser) => Promise<Content[]>, readOnly = false) => tool(name, description, input, (args, ctx) => ctx.resources.useBrowser(ctx, b => operation(args, b)), readOnly)
@@ -166,6 +170,9 @@ export const WORKER_TOOLS: WorkerTool[] = [
     ctx.refs.generated?.add(name)
     return [image(made.png), text({ src: `/assets/${name}`, width: made.width, height: made.height, seconds: made.seconds })]
   }),
+  tool('code_list', 'List folders and files of the codebase the user linked (read-only). Secrets, dependencies and build output are excluded.', { path: z.string().max(500).optional(), depth: z.number().int().min(1).max(5).optional() }, async ({ path, depth }, ctx) => [text(linkedCode(ctx).list(path, depth))], true),
+  tool('code_search', 'Search the linked codebase for a case-insensitive regular expression.', { pattern: z.string().min(1).max(300), path: z.string().max(500).optional(), glob: z.string().max(120).optional() }, async ({ pattern, path, glob }, ctx) => [text(linkedCode(ctx).search(pattern, path, glob))], true),
+  tool('code_read', 'Read a text file from the linked codebase with line numbers.', { path: z.string().min(1).max(500), offset: z.number().int().min(1).optional(), limit: z.number().int().min(1).max(1000).optional() }, async ({ path, offset, limit }, ctx) => [text(linkedCode(ctx).read(path, offset, limit))], true),
   browser('browser_navigate', 'Navigate your private browser to a public HTTP(S) page. Local addresses and Chalk endpoints are blocked. No logged-in state is inherited.', { url: z.string() }, async ({ url }, b) => [text(await b.navigate(url))]),
   browser('browser_snapshot', 'Read your private page and its browser-specific refs. Other jobs cannot use these refs.', {}, async (_a, b) => [text(await b.snapshot())], true),
   browser('browser_click', 'Click a ref from your private snapshot.', { ref: z.string() }, async ({ ref }, b) => [text(await b.click(ref))]),

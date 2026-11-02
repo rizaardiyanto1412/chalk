@@ -8,6 +8,7 @@ import { findCli } from './agentCli'
 import type { TurnContext } from './agent'
 import { loadStyle, styleSummaries, type ResolvedStyle } from './styles'
 import { projectDesignNotes } from './design'
+import { savedCodebase } from './codebase'
 import { DraftBook, WorkerResources, type Draft, type PageCapture, type ReferenceSet, type WorkerContext, type WorkerRegistry, runWorker } from './worker'
 import { frozenHtml, referenceAssetNames, workerTools } from './workerTools'
 import { PLANNER_SYSTEM, plannerPrompt, workerPrompt } from './runPrompt'
@@ -62,7 +63,7 @@ export class Run {
       if (total > 40 * 1024 * 1024) throw new Error('Selected reference assets exceed 40 MB.')
       assets.set(name, Buffer.from(bytes))
     }
-    this.refsAtSend = Object.freeze({ frames: Object.freeze(frames), assets, selectedElements: structuredClone(turn.selectedElements), browserPick: structuredClone(turn.browserPick), designNotes: projectDesignNotes(this.dir), style: turn.style ? structuredClone(turn.style) : null, generated: new Set<string>() })
+    this.refsAtSend = Object.freeze({ frames: Object.freeze(frames), assets, selectedElements: structuredClone(turn.selectedElements), browserPick: structuredClone(turn.browserPick), designNotes: projectDesignNotes(this.dir), style: turn.style ? structuredClone(turn.style) : null, generated: new Set<string>(), codebase: savedCodebase(this.dir) })
   }
   stop(): void {
     if (this.phase !== 'running') return

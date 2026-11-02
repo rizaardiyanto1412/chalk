@@ -8,6 +8,7 @@ import { Browser } from './browser'
 import { AGENT_SYSTEM } from './prompt'
 import { WORKER_RULES } from './runPrompt'
 import type { ResolvedStyle } from './styles'
+import type { Codebase } from './codebase'
 
 export interface Draft { id: FrameId; name: string; html: string; width: number; height: number; revision: number; styleBlocks?: number }
 export class DraftBook {
@@ -62,6 +63,8 @@ export interface ReferenceSet {
   readonly style: ResolvedStyle | null
   /** Project assets this run's workers generated. Published frames link to them instead of inlining them. */
   readonly generated?: Set<string>
+  /** The project's linked codebase at Send, read-only. */
+  readonly codebase?: Codebase | null
 }
 export interface WorkerContext {
   readonly job: JobSpec

@@ -1,5 +1,6 @@
 import { foldRuns, type RunProgress } from '../../shared/run'
 import { RunControls, savedRunSettings } from './RunControls'
+import { CodebaseButton } from './CodebaseButton'
 import { RunCard } from './RunCard'
 import { useEffect, useRef, useState } from 'react'
 import type { ChatHistoryState } from '../../shared/chats'
@@ -212,7 +213,7 @@ export function Chat({ history, status, presence, models, claudePath, selectedFr
             {selectedFrames.length > 0 && <button className="chip-clear" onClick={onClearSelection}>Clear</button>}
           </div>
         )}
-        <RunControls value={parallel} onChange={setParallel} disabled={running} />
+        <RunControls value={parallel} onChange={setParallel} disabled={running}><CodebaseButton disabled={running} model={model} /></RunControls>
         <div className="input-box">
           <textarea
             ref={box}

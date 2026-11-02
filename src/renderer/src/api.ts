@@ -32,6 +32,9 @@ export interface InitState {
   presence: PresenceState
 }
 
+/** The source folder linked to the visible project, or null. */
+export type CodebaseState = { name: string; path: string; hasBrief: boolean } | null
+
 export interface ProjectTab {
   dir: string
   name: string
@@ -58,6 +61,7 @@ export const api = {
   browser: (action: string, arg?: unknown) => e().invoke('browser', action, arg),
   sendAgent: (text: string, model: string, style: StyleChoice | null, parallel?: RunSettings) => e().invoke('agent:send', { text, model, style, ...(parallel ? { parallel } : {}) }),
   showRunFrame: (id: FrameId) => e().invoke('run:show', id),
+  codebase: (action: 'get' | 'choose' | 'clear'): Promise<CodebaseState> => e().invoke('codebase', action) as Promise<CodebaseState>,
   stopAgent: () => e().invoke('agent:stop'),
   newChat: () => e().invoke('chats:new'),
   openChat: (id: string) => e().invoke('chats:open', id),
@@ -74,6 +78,7 @@ export const api = {
   on: {
     runProgress: (fn: (p: RunProgress) => void) => e().on('run:progress', fn),
     runLive: (fn: (s: LiveRun) => void) => e().on('run:live', fn),
+    codebase: (fn: (s: CodebaseState) => void) => e().on('codebase', fn),
     edit: (fn: (command: EditCommand) => void) => e().on('edit', fn),
     elementSelection: (fn: (element: SelectedElement[]) => void) => e().on('element:selection', fn),
     selection: (fn: (ids: FrameId[]) => void) => e().on('selection', fn),

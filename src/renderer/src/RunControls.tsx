@@ -5,7 +5,7 @@ export function savedRunSettings(): RunSettings {
   try { return runSettingsSchema.parse(JSON.parse(localStorage.getItem('chalk.parallel') ?? 'null')) }
   catch { return DEFAULT_RUN_SETTINGS }
 }
-export function RunControls({ value, onChange, disabled }: { value: RunSettings; onChange: (value: RunSettings) => void; disabled: boolean }) {
+export function RunControls({ value, onChange, disabled, children }: { value: RunSettings; onChange: (value: RunSettings) => void; disabled: boolean; children?: React.ReactNode }) {
   const [open, setOpen] = useState<'variations' | 'agents' | null>(null)
   const root = useRef<HTMLDivElement>(null)
   const variations = useRef<HTMLButtonElement>(null)
@@ -32,6 +32,7 @@ export function RunControls({ value, onChange, disabled }: { value: RunSettings;
       <button type="button" ref={agents} aria-label="Parallel agents" aria-haspopup="dialog" aria-expanded={open === 'agents'} disabled={disabled} onClick={() => setOpen(open === 'agents' ? null : 'agents')}>
         <span aria-hidden="true">⫶</span> {value.agents} {value.agents === 1 ? 'agent' : 'agents'}
       </button>
+      {children}
     </div>
     {open && <div className="run-popover" role="dialog" aria-label={open === 'variations' ? 'Variations' : 'Parallel agents'}>
       {open === 'variations' ? <>

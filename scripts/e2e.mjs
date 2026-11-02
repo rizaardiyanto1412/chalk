@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, symlin
 import { execFileSync } from 'node:child_process'
 import { PNG } from 'pngjs'
 import { tmpdir } from 'node:os'
-import { join, dirname } from 'node:path'
+import { join, dirname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 import { checkExports } from './export-e2e.mjs'
@@ -114,7 +114,7 @@ await check('MCP lists the shared canvas, design, and browser tools', async () =
   const { tools } = await client.listTools()
   assert.deepEqual(tools.map((t) => t.name).sort(), [
     'get_canvas', 'get_frame', 'screenshot_frame', 'review_frame', 'export_frame', 'copy_frame_image', 'create_frame', 'update_frame', 'edit_frame', 'delete_frame',
-    'get_style', 'get_design_guidelines', 'search_photos', 'generate_image', 'check_numbers', 'browser_state', 'browser_navigate', 'browser_snapshot', 'browser_click',
+    'get_style', 'get_design_guidelines', 'search_photos', 'generate_image', 'check_numbers', 'code_list', 'code_search', 'code_read', 'save_product_brief', 'browser_state', 'browser_navigate', 'browser_snapshot', 'browser_click',
     'browser_set_device', 'browser_type', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_capture_to_canvas', 'browser_extract_styles'
   ].sort())
   assert.equal(tools.find((t) => t.name === 'get_style').annotations.readOnlyHint, true)
@@ -231,6 +231,69 @@ await check('generate_image runs the local Codex CLI in a throwaway folder and s
     const failed = await client.callTool({ name: 'generate_image', arguments: { prompt: `${marker} a lamp in a studio` } })
     assert.equal(failed.isError, true)
     assert.match(failed.content[0].text, message)
+  }
+})
+
+await check('a linked codebase is readable by the agent, hides secrets and outside files, and feeds a product brief', async () => {
+  const repo = realpathSync(mkdtempSync(join(tmpdir(), 'chalk-codebase-')))
+  const outside = join(mkdtempSync(join(tmpdir(), 'chalk-outside-')), 'private.txt')
+  writeFileSync(outside, 'OUTSIDE_SECRET_VALUE')
+  writeFileSync(join(repo, 'README.md'), '# Acme Ledger\nBookkeeping for small studios.\n')
+  mkdirSync(join(repo, 'src'))
+  writeFileSync(join(repo, 'src', 'pricing.tsx'), 'export const plans = ["Starter $12", "Studio $39"]\n')
+  writeFileSync(join(repo, '.env'), 'API_KEY=ENV_SECRET_VALUE\n')
+  writeFileSync(join(repo, 'secrets.json'), '{"token":"JSON_SECRET_VALUE"}')
+  mkdirSync(join(repo, 'node_modules', 'pkg'), { recursive: true })
+  writeFileSync(join(repo, 'node_modules', 'pkg', 'index.js'), 'DEPENDENCY_CODE')
+  symlinkSync(outside, join(repo, 'src', 'linked.txt'))
+  const design = join(project, 'DESIGN.md')
+  const fail = async (name, args, pattern) => {
+    const r = await client.callTool({ name, arguments: args })
+    assert.equal(r.isError, true, `${name} ${JSON.stringify(args)} must fail`)
+    assert.match(r.content[0].text, pattern)
+  }
+  try {
+    await fail('code_list', {}, /No codebase folder is linked/)
+    await app.evaluate(({ dialog }, repo) => {
+      globalThis.originalCodebaseDialog = dialog.showOpenDialog
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [repo] })
+    }, repo)
+    await agentTab()
+    await win.getByRole('button', { name: 'Codebase' }).click()
+    await win.getByRole('button', { name: 'Codebase' }).filter({ hasText: basename(repo) }).waitFor()
+    assert.deepEqual(JSON.parse(readFileSync(join(project, '.chalk', 'codebase.json'), 'utf8')), { dir: repo })
+
+    const listed = json(await call(client, 'code_list', { depth: 3 })).entries.join('\n')
+    assert.match(listed, /README\.md/)
+    assert.match(listed, /src\/pricing\.tsx/)
+    assert.doesNotMatch(listed, /\.env|secrets\.json|node_modules/)
+    const found = json(await call(client, 'code_search', { pattern: 'SECRET_VALUE|DEPENDENCY_CODE|Studio \\$39' })).matches
+    assert.deepEqual(found, ['src/pricing.tsx:1: export const plans = ["Starter $12", "Studio $39"]'], 'search sees code but no secrets, dependencies, or files outside the folder')
+    assert.match(json(await call(client, 'code_read', { path: 'README.md' })).lines, /^1\t# Acme Ledger/)
+    await fail('code_read', { path: '.env' }, /excluded/)
+    await fail('code_read', { path: 'secrets.json' }, /excluded/)
+    await fail('code_read', { path: 'node_modules/pkg/index.js' }, /excluded/)
+    await fail('code_read', { path: '../' + basename(outside) }, /No such path|outside/)
+    await fail('code_read', { path: 'src/linked.txt' }, /outside the codebase/)
+    await fail('code_read', { path: outside }, /outside the codebase/)
+
+    writeFileSync(design, '# My notes\nKeep the logo black.\n')
+    await call(client, 'save_product_brief', { markdown: 'Acme Ledger is bookkeeping for small studios. Plans: Starter $12, Studio $39.' })
+    await call(client, 'save_product_brief', { markdown: 'Acme Ledger helps small studios close their books. Plans: Starter $12 and Studio $39 a month.' })
+    const brief = readFileSync(design, 'utf8')
+    assert.equal(brief.match(/<!-- chalk:product-brief -->/g).length, 1, 'a second brief replaces the first')
+    assert.match(brief, /close their books/)
+    assert.match(brief, /Keep the logo black/, 'the user notes stay')
+    assert.match((await call(client, 'get_design_guidelines'))[0].text, /close their books/)
+
+    await win.getByRole('button', { name: 'Codebase' }).click()
+    await win.getByRole('dialog', { name: 'Codebase' }).getByText('A product brief from it is saved').waitFor()
+    await win.getByRole('button', { name: 'Remove' }).click()
+    await win.getByRole('button', { name: 'Codebase' }).filter({ hasText: 'Add codebase' }).waitFor()
+    await fail('code_list', {}, /No codebase folder is linked/)
+  } finally {
+    await app.evaluate(({ dialog }) => { if (globalThis.originalCodebaseDialog) dialog.showOpenDialog = globalThis.originalCodebaseDialog })
+    try { unlinkSync(design) } catch {}
   }
 })
 

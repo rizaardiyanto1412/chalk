@@ -14,6 +14,7 @@ export interface TurnContext {
   browserPick: BrowserPick | null
   browserUrl: string
   style: ResolvedStyle | null
+  codebase?: { name: string; hasBrief: boolean }
 }
 
 /** Pure: the context block the agent sees ahead of the user's words. */
@@ -29,6 +30,9 @@ export function contextBlock(c: TurnContext): string {
     lines.push(`The user picked this element in the browser (${p.url}): <${p.tag}> at ${p.selector}, ${Math.round(p.rect.width)}×${Math.round(p.rect.height)}px. Text: "${p.text.slice(0, 200)}". HTML (trimmed):\n${p.outerHTML.slice(0, 2000)}`)
   }
   if (c.style) lines.push(`${STYLE_PRECEDENCE}\n<chosen-style>\n${JSON.stringify(c.style)}\n</chosen-style>`)
+  if (c.codebase) lines.push(c.codebase.hasBrief
+    ? `Linked codebase: ${c.codebase.name}. DESIGN.md holds its product brief; design from that. Use code_search and code_read only for specific details the brief lacks.`
+    : `Linked codebase: ${c.codebase.name}, not yet summarised. Before designing, explore it with code_list, code_search and code_read (README, package manifest, routes or pages, marketing copy, theme or Tailwind config, pricing), at most about 20 calls, then call save_product_brief.`)
   if (c.priorRuns) lines.push(c.priorRuns)
   return lines.length ? `<context>\n${lines.join('\n')}\n</context>\n\n` : ''
 }

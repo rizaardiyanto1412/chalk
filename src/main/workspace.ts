@@ -7,6 +7,7 @@ import { FrameCommands } from './frameCommands'
 import { Agent } from './agent'
 import { Presence } from './presence'
 import { LiveRunView } from './liveRun'
+import { savedCodebase, type Codebase } from './codebase'
 import { notePhotoUse, type PhotoKeys } from './photos'
 import type { Browser } from './browser'
 import type { Run } from './run'
@@ -38,10 +39,12 @@ export class Workspace {
   readonly frameCommands: FrameCommands
   readonly ctx: ToolContext
   run: Run | null = null
+  codebase: Codebase | null
 
   constructor(readonly dir: string, private readonly deps: WorkspaceDeps) {
     const send = (channel: string, payload?: unknown) => deps.send(this, channel, payload)
     this.store.open(dir)
+    this.codebase = savedCodebase(dir)
     this.chats = new ChatHistory((state) => send('chats:state', state))
     this.chats.openProject(dir)
     this.live = new LiveRunView(() => this.store.doc, (state) => send('run:live', state))
@@ -60,6 +63,7 @@ export class Workspace {
       photoKeys: deps.photoKeys,
       frameUrl: (f) => `${deps.origin()}/frame/${f.id}?v=${f.updatedAt}`,
       measure: deps.measure,
+      codebase: () => this.codebase,
       focus: (target) => send('focus', { ...target, source: 'agent' })
     }
     this.agent = new Agent(() => `${deps.origin()}/mcp/project/${this.token}`, () => this.store.dir)
