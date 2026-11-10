@@ -23,7 +23,7 @@ export function listModels(): Promise<ModelOption[]> {
     if (!claude) return FALLBACK_MODELS
     const { query } = await import('@anthropic-ai/claude-agent-sdk')
     const idle = (async function* () { await new Promise(() => {}) })()
-    const q = query({ prompt: idle, options: { pathToClaudeCodeExecutable: claude, settingSources: [], tools: [], persistSession: false } })
+    const q = query({ prompt: idle, options: { pathToClaudeCodeExecutable: claude, settingSources: ['user'], tools: [], persistSession: false } })
     try {
       const listed = await Promise.race([q.supportedModels(), new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))])
       const models = listed.map(parse)

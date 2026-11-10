@@ -23,7 +23,7 @@ export const FALLBACK_MODELS: ModelOption[] = [
   { id: 'opus', label: 'Opus', version: 'Opus', summary: 'Best for everyday, complex tasks', price: '', efforts: [...EFFORTS] },
   { id: 'sonnet', label: 'Sonnet', version: 'Sonnet', summary: 'Efficient for routine tasks', price: '', efforts: [...EFFORTS] },
   { id: 'haiku', label: 'Haiku', version: 'Haiku', summary: 'Fastest for quick answers', price: '', efforts: [...EFFORTS] },
-  { id: 'claude-fable-5-1', label: 'Fable', version: 'Fable 5.1', summary: 'Most capable for the hardest tasks', price: '', efforts: [...EFFORTS] }
+  { id: 'fable', label: 'Fable', version: 'Fable', summary: 'Most capable for the hardest tasks', price: '', efforts: [...EFFORTS] }
 ]
 
 /** The picker's short label: version for listed models, the raw id for a custom one. */
